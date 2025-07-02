@@ -27,7 +27,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout devops-connectors-docs repository
+    - name: Checkout gitlab-docs repository
       uses: actions/checkout@v4
       with:
         token: ${{ secrets.GH_TOKEN }}
@@ -165,7 +165,7 @@ jobs:
 
         echo "📝 Created branch: $branch_name"
 
-    - name: Apply changes from devops-connectors-docs
+    - name: Apply changes from gitlab-docs
       if: steps.check_pr_commit.outputs.is_pr_commit == 'true' && steps.check_pr_commit.outputs.skip_sync == 'false' && steps.get_changes.outputs.has_doc_changes == 'true'
       run: |
         commit_sha="${{ steps.check_pr_commit.outputs.commit_sha }}"
@@ -182,7 +182,7 @@ jobs:
 
         # Apply the patch
         if [ -s ../changes.patch ]; then
-          echo "📦 Applying changes from devops-connectors-docs..."
+          echo "📦 Applying changes from gitlab-docs..."
           git apply ../changes.patch || {
             echo "⚠️ Patch application failed, trying manual copy..."
 
@@ -245,7 +245,7 @@ jobs:
 
           # Create commit message with reverse sync marker
 
-          echo "[reverse-sync] Sync documentation changes from devops-connectors-docs PR #$pr_number" > commit_message.txt
+          echo "[reverse-sync] Sync documentation changes from gitlab-docs PR #$pr_number" > commit_message.txt
           echo "" >> commit_message.txt
           echo "- Title: $pr_title" >> commit_message.txt
           echo "- Author: $pr_author" >> commit_message.txt
@@ -279,22 +279,22 @@ jobs:
 
         # Create PR body with proper JSON escaping
         pr_body=$(cat << 'EOF'
-        ### 🔄 Reverse Sync from devops-connectors-docs
+        ### 🔄 Reverse Sync from gitlab-docs
 
-        This PR incorporates documentation changes from external contributors to the devops-connectors-docs repository.
+        This PR incorporates documentation changes from external contributors to the gitlab-docs repository.
 
         #### Original PR Details
-        - **Repository**: alauda/devops-connectors-docs
+        - **Repository**: alauda/gitlab-docs
         - **PR**: #%PR_NUMBER% - %PR_TITLE%
         - **Author**: @%PR_AUTHOR%
         - **URL**: %PR_URL%
 
         #### Changes
-        This PR includes changes to documentation files that were contributed by external contributors to the public devops-connectors-docs repository.
+        This PR includes changes to documentation files that were contributed by external contributors to the public gitlab-docs repository.
 
         #### Important Notes
         - ⚠️ This PR contains the `[reverse-sync]` marker to prevent infinite sync loops
-        - ✅ Once merged, this will NOT trigger a forward sync back to devops-connectors-docs
+        - ✅ Once merged, this will NOT trigger a forward sync back to gitlab-docs
         - 🔍 Please review the changes to ensure they align with internal documentation standards
 
         ---
@@ -309,7 +309,7 @@ jobs:
 
         # Create JSON payload with proper escaping
         json_payload=$(jq -n \
-          --arg title "[reverse-sync] Documentation changes from devops-connectors-docs PR #$pr_number" \
+          --arg title "[reverse-sync] Documentation changes from gitlab-docs PR #$pr_number" \
           --arg head "$branch_name" \
           --arg base "$pr_base_ref" \
           --arg body "$pr_body" \
