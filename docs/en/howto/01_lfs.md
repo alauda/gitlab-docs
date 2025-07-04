@@ -1,5 +1,6 @@
 ---
 title: "Managing Large Files with LFS"
+weight: 20
 ---
 
 This article will introduce how to use LFS to manage large files, including GitLab instance configuration and Git client configuration.
