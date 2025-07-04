@@ -1,0 +1,49 @@
+---
+weight: 30
+---
+
+# Lifecycle Policy
+
+## Version Lifecycle Timeline
+
+Below is the lifecycle timeline for released versions of the `Alauda Build of Gitlab` operator:
+
+| Version | Release Date | End of Support |
+| ------- | ------------ | -------------- |
+| v17.11.z  | 2025-06-30   | 2026-06-30     |
+| v17.8.z  | 2025-04-08   | 2026-04-08     |
+
+## Release Policy
+
+A new version of the `Alauda Build of Gitlab` operator is released at least once every 4 months, generally following the second-latest minor version officially released by Gitlab.
+
+Release dates are flexible and not fixed. Within 4 months after the previous release, at least one new version will be provided. The actual number of releases depends on when Gitlab announces new `Required Intermediate Versions`.
+
+::: tip What is a Required Intermediate Version
+A `Required Intermediate Version` is a version that must be included in the Gitlab [upgrade path](https://gitlab-com.gitlab.io/support/toolbox/upgrade-path/?current=17.8.5) (for example, 17.8.z and 17.11.z are `Required Intermediate Versions`).
+
+Gitlab releases a new minor version every month. When a new minor version is released, the previous one may be marked as a `Required Intermediate Version`. Once Gitlab officially designates such a version, Alauda will promptly provide the corresponding operator update.
+:::
+
+These policies are designed for the following reasons:
+
+1. Gitlab follows a rapid release cycle, releasing a new minor version every month, with each version only maintained for three months. In contrast, Alauda offers up to 12 months of maintenance for each operator version, which increases maintenance costs.
+2. Upgrading Gitlab requires a significant operational window. Frequent upgrades (every 3 months) would create a heavy operational burden and increase the risk of business disruption for customers.
+3. The Gitlab operator's one-year maintenance period gives customers sufficient time to plan and execute upgrades to newer stable versions.
+
+::: tip Differences Between Alauda and Gitlab Versions
+    Alauda's Gitlab operator versions are typically 1-5 minor versions (1-5 months) behind the latest official Gitlab release.
+:::
+
+Additionally, Alauda will release security version updates every two months during the maintenance period to ensure the security and stability of the operators.
+
+## Maintenance Policy
+
+Alauda provides 12 months of maintenance support for each released minor version of the Gitlab operator.
+
+During the maintenance period, the following support is included:
+
+1. Patch updates from Gitlab, including bug fixes and security patches
+2. Security updates that meet Alauda's security standards
+3. Assistance for customers to upgrade their Gitlab operator to newer versions
+
