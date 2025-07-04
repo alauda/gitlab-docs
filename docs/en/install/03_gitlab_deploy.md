@@ -164,7 +164,7 @@ spec:
           name: default
 ```
 
-##### Storage
+##### Storage \{storage}
 
 GitLab data storage mainly includes two parts:
 
@@ -223,7 +223,7 @@ spec:
         path: /mnt/data/gitlab-hostpath # Node storage path, needs to be created in advance
 ```
 
-##### Network Access
+##### Network Access \{#network_access}
 
 Network access mainly includes two methods: domain name access and NodePort access.
 
