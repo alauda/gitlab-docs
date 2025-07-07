@@ -1,20 +1,20 @@
 ---
 created: "2025-2-11"
-title: Upgrading the GitLab Version
+title: 升级 gitlab 版本
 ---
 
-## Prerequisites
+## 前提条件
 
-1. The new version image has been successfully built.
-2. The Helm chart has been upgraded and has passed all integration tests.
+1.  已经构建出新版本的镜像
+2.  已经完成 chart 的升级，并通过了集成测试
 
-## Upgrade Steps
+## 升级步骤
 
-1. Update the tool version: Replace the previous version of the tool with the latest version.
-2. Update submodules:
+1. 替换工具版本：将工具上一个版本替换为当前版本
+2. 重新生成 submodule:
 
-    ```bash
-    make update-submodule
-    ```
+```bash
+make update-submodule
+```
 
-3. Commit your code and build the operator image for testing
+3. 提交代码构建 operator 镜像测试

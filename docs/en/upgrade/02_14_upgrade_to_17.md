@@ -1,6 +1,5 @@
 ---
 title: "Data migration from GitLab 14.0.12 to 17.8.5"
-weight: 50
 ---
 
 :::tip Problem to Solve
