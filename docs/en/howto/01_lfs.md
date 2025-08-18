@@ -206,6 +206,8 @@ When cloning very large repositories, if the client has insufficient resources, 
 1. Add the `GIT_LFS_SKIP_SMUDGE=1` parameter when cloning to skip LFS file dumping
 2. Enter the local code directory and execute the `git lfs pull` command to pull LFS files to the local machine
 
+<!-- lint ignore code-block-split-list -->
+
 ```bash
 GIT_LFS_SKIP_SMUDGE=1 git clone http://example.com/root/local-lfs.git
 cd local-lfs
