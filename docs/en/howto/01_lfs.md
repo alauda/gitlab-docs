@@ -14,7 +14,7 @@ Applicable scenarios:
 
 ### Prerequisites
 
-- A GitLab instance has been deployed according to the [GitLab Instance Deployment](../install/03_gitlab_deploy.md) documentation.
+- A GitLab instance has been deployed according to the [GitLab Instance Deployment](../install/03_gitlab_deploy.mdx) documentation.
 
 GitLab supports [two methods](https://docs.gitlab.com/ee/administration/lfs/?tab=Helm+chart+%28Kubernetes%29) for configuring LFS, with the main difference being the storage location of LFS files.
 
