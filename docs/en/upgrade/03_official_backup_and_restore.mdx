@@ -1,0 +1,446 @@
+---
+weight: 50
+---
+
+# GitLab Official Backup and Restore
+
+This solution is based on GitLab's official backup and restore approach. For detailed information, please refer to the [GitLab official documentation](https://docs.gitlab.com/ee/administration/backup_restore/index.html).
+
+## Applicability
+
+This solution is only applicable to GitLab instances running **version 17.8 or later** that are configured with [object storage](https://docs.gitlab.com/administration/object_storage/).
+
+If your GitLab instance has not been configured with object storage, GitLab provides a [data migration solution](https://docs.gitlab.com/ee/administration/object_storage.html#migrate-to-object-storage). You can refer to this solution to migrate your data first, then use this solution for backup and restore.
+
+:::details How to Check if Object Storage is Configured
+
+```bash
+export GITLAB_NAMESPACE=<namespace of the GitLab instance to be backed up>
+export GITLAB_NAME=<name of the GitLab instance to be backed up>
+
+kubectl get gitlabofficial ${GITLAB_NAME} -n ${GITLAB_NAMESPACE} -o jsonpath='{.spec.helmValues.global.appConfig.object_store}'
+
+# Output:
+# {"connection":{"key":"connection","secret":"gitlab-rails-storage"},"enabled":true}
+```
+
+If the `enabled` field is `true` and the `connection` field is not empty, it indicates that the instance has object storage configured.
+
+:::
+
+## Terminology
+
+| Term | Definition |
+| ---- | ---------- |
+| Source Instance | The GitLab instance before backup |
+| Target Instance | The GitLab instance after restore |
+| Source Namespace | The namespace where the source instance is located |
+| Target Namespace | The namespace where the target instance is located |
+| GitLab CR Resource | Describes the deployment configuration of GitLab instance, used by the Operator to deploy GitLab instances |
+
+## Prerequisites
+
+1. **Deploy MinIO Object Storage**: The official backup and restore solution relies on object storage to save backup data, requiring a pre-deployed MinIO instance. ACP provides `MinIO Object Storage` for <ExternalSiteLink name="acp" href="/storage/storagesystem_minio/installation.html" children="quick MinIO instance creation" />.
+2. **Install mc Command-Line Tool**: mc is MinIO's command-line tool for managing MinIO instances. For installation instructions, refer to the [MinIO official documentation](https://min.io/docs/minio/linux/reference/minio-mc.html#install-mc).
+3. **Install kubectl Command-Line Tool**: kubectl is Kubernetes' command-line tool for managing Kubernetes clusters. For installation instructions, refer to the [Kubernetes official documentation](https://kubernetes.io/docs/tasks/tools/install-kubectl-linux/).
+
+For convenience in subsequent operations, please set the environment variables first:
+
+```bash
+export MINIO_HOST=<MinIO instance access address> # Example: http://192.168.1.100:32008
+export MINIO_ACCESS_KEY=<MinIO instance access key> # Example: minioadmin
+export MINIO_SECRET_KEY=<MinIO instance secret key> # Example: minioadminpassword
+export MINIO_ALIAS_NAME=<MinIO instance alias name> # Example: myminio
+
+export GITLAB_NAMESPACE=<namespace of the GitLab instance to be backed up>
+export GITLAB_NAME=<name of the GitLab instance to be backed up>
+```
+
+Execute the following commands to configure the mc command-line tool and test the connection:
+
+```bash
+mc alias set ${MINIO_ALIAS_NAME} ${MINIO_HOST} ${MINIO_ACCESS_KEY} ${MINIO_SECRET_KEY}
+mc ping ${MINIO_ALIAS_NAME}
+
+# Output:
+#   1: http://192.168.131.56:32571:32571   min=98.86ms    max=98.86ms    average=98.86ms    errors=0   roundtrip=98.86ms
+#   2: http://192.168.131.56:32571:32571   min=29.57ms    max=98.86ms    average=64.21ms    errors=0   roundtrip=29.57ms
+#   3: http://192.168.131.56:32571:32571   min=29.57ms    max=98.86ms    average=52.77ms    errors=0   roundtrip=29.88ms
+```
+
+If you can successfully ping the MinIO instance, it indicates that mc is configured correctly.
+
+## Backup
+
+### Prerequisites
+
+#### Create Buckets
+
+You need to create two buckets:
+
+1. Bucket for storing backup data, named: `gitlab-backups`
+2. Bucket for storing temporary data during backup, named: `gitlab-backups-tmp`
+
+Execute the following commands to create the buckets:
+
+```bash
+mc mb ${MINIO_ALIAS_NAME}/gitlab-backups
+mc mb ${MINIO_ALIAS_NAME}/gitlab-backups-tmp
+
+# Output:
+# Bucket created successfully `myminio/gitlab-backups`.
+# Bucket created successfully `myminio/gitlab-backups-tmp`.
+```
+
+Execute the following command to verify that the buckets were created successfully:
+
+```bash
+mc ls ${MINIO_ALIAS_NAME} | grep gitlab-backups
+
+# Output:
+# [2025-06-30 11:58:09 CST]     0B gitlab-backups/
+# [2025-06-30 11:58:13 CST]     0B gitlab-backups-tmp/
+```
+
+### Manual Backup
+
+#### Deploy Toolbox Component \{#deploy_toolbox_component}
+
+To perform an official GitLab backup, you must run the backup command inside the `toolbox pod`. During this process, backup files will be uploaded to object storage. Therefore, you need to prepare an object storage configuration file in advance. Run the following script to generate the required configuration file:
+
+```bash
+set -e
+
+if [[ -z "${GITLAB_NAMESPACE}" ]]; then
+    echo "GITLAB_NAMESPACE is not set, please set it and try again"
+    exit 1
+fi
+
+CLEAN_HOST=${MINIO_HOST#http://}
+CLEAN_HOST=${CLEAN_HOST#https://}
+use_https="False"
+if [[ $MINIO_HOST == https://* ]]; then
+    use_https="True"
+fi
+
+CONFIG_DATA=$(cat << EOF
+[default]
+host_base = ${CLEAN_HOST}
+host_bucket = ${CLEAN_HOST}/%(bucket)
+access_key = ${MINIO_ACCESS_KEY}
+secret_key = ${MINIO_SECRET_KEY}
+bucket_location = us-east-1
+use_https = ${use_https}
+EOF
+)
+
+kubectl create secret generic s3cfg \
+    -n ${GITLAB_NAMESPACE} \
+    --from-literal=config="$CONFIG_DATA"
+
+# Output:
+# secret/s3cfg created
+```
+
+Execute the following command in the cluster where GitLab is located to edit the GitLab instance CR:
+
+```bash
+kubectl edit gitlabofficial ${GITLAB_NAME} -n ${GITLAB_NAMESPACE}
+```
+
+**Edit the following yaml configuration first** according to the comments, then add it to the CR:
+
+```yaml
+spec:
+  helmValues:
+    global:
+      appConfig:
+        backups:
+          # These two bucket names must match the bucket names created in previous steps
+          bucket: gitlab-backups
+          tmpBucket: gitlab-backups-tmp
+    gitlab:
+      toolbox:
+        backups:
+          objectStorage:
+            config:
+              key: config
+              # Name of the secret created in the previous step
+              secret: s3cfg
+        enabled: true
+        persistence:
+          accessMode: ReadWriteMany
+          enabled: true
+          # Backup requires packaging all files locally, so sufficient space is needed
+          # Determine PVC capacity based on instance's used disk space
+          size: 10Gi
+          # Storage class name
+          storageClass: nfs
+```
+
+After updating the GitLab CR, it will automatically deploy a new toolbox component. Use the following command to check if the toolbox component is deployed successfully:
+
+```bash
+kubectl get pod -n ${GITLAB_NAMESPACE} | grep toolbox
+
+# Output:
+# xx-gitlab-toolbox-6f578f6b-f7wlw                 1/1     Running       0          4h11m
+```
+
+If the pod status is `Running`, it indicates that the toolbox component is deployed successfully.
+
+#### Execute Backup
+
+Use the following command to enter the terminal environment of the toolbox pod:
+
+```bash
+export TOOLBOX_POD_NAME=$(kubectl get pod -n ${GITLAB_NAMESPACE} | grep ${GITLAB_NAME}-toolbox | awk '{print $1}')
+kubectl exec -it ${TOOLBOX_POD_NAME} -n ${GITLAB_NAMESPACE} -- bash
+```
+
+Execute backup:
+
+```bash
+cd ~/; nohup backup-utility > output.log 2>&1 &
+```
+
+Backup process takes some time, use the following command to check backup log to confirm backup progress:
+
+```bash
+cd ~/; tail -f output.log
+
+# Output:
+# Bucket not found: gitlab-packages. Skipping backup of packages ...
+# Bucket not found: gitlab-mr-diffs. Skipping backup of external_diffs ...
+# Bucket not found: gitlab-terraform-state. Skipping backup of terraform_state ...
+# Bucket not found: gitlab-pages. Skipping backup of pages ...
+# Bucket not found: gitlab-ci-secure-files. Skipping backup of ci_secure_files ...
+# Packing up backup tar
+# WARNING: Module python-magic is not available. Guessing MIME types based on file extensions.
+# [DONE] Backup can be found at s3://gitlab-backups/1751272314_2025_06_30_17.11.4_gitlab_backup.tar
+```
+
+When the program completes successfully, the backup process ends.
+
+:::info Backup ID
+Backup file name is dynamically generated based on backup time and version information, for example `1751272314_2025_06_30_17.11.4_gitlab_backup.tar`. The `1751272314_2025_06_30_17.11.4` is the unique identifier (backup ID) of this backup. When executing restore operation, you need to provide the corresponding backup ID.
+:::
+
+### Scheduled Backup
+
+GitLab scheduled backup is completed through the toolbox component. Unlike manual backup, scheduled backup uses Crontab to implement periodic backup.
+
+Execute the following command in the cluster where GitLab is located to edit the GitLab instance CR:
+
+```bash
+kubectl edit gitlabofficial ${GITLAB_NAME} -n ${GITLAB_NAMESPACE}
+```
+
+**Edit the following yaml configuration first according to the comments**, then add it to the CR:
+
+```yaml
+spec:
+  helmValues:
+    global:
+      appConfig:
+        backups:
+          # These two bucket names must match the bucket names created in previous steps
+          bucket: gitlab-backups
+          tmpBucket: gitlab-backups-tmp
+    gitlab:
+      toolbox:
+        enabled: true
+        backups:
+          cron:
+            enabled: true
+            # Configure backup cycle
+            schedule: "0 1 * * *"
+            persistence:
+              enabled: true
+              accessMode: ReadWriteMany
+              # Backup requires packaging all files in the toolbox pod, so sufficient space is needed
+              # Determine PVC capacity based on instance's used disk space
+              size: 10Gi
+              # Storage class name
+              storageClass: nfs
+          objectStorage:
+            config:
+              key: config
+              # Name of the secret created in the previous step
+              secret: s3cfg
+```
+
+:::details How to Configure Backup Cycle
+
+Crontab rule consists of five time fields, separated by spaces, from left to right:
+
+*   **Minute (Minute)**: Which minute of the hour to execute the task, range 0-59
+*   **Hour (Hour)**: Which hour of the day to execute the task, range 0-23
+*   **Day of the month (Day of the month)**: Which day of the month to execute the task, range 1-31
+*   **Month (Month)**: Which month of the year to execute the task, range 1-12 (You can also use abbreviated month names like Jan, Feb, Mar, etc.)
+*   **Weekday (Day of the week)**: Which day of the week to execute the task, range 0-7 (0 and 7 both represent Sunday, 1 represents Monday, and so on. You can also use abbreviated weekday names like Sun, Mon, Tue, etc.)
+
+**Example:**
+
+1. Execute at 3:00 AM every day: `0 3 * * *`
+2. Execute at 3:00 AM on the 1st and 15th of each month: `0 3 1,15 * *`
+3. Execute every 10 minutes: `*/10 * * * *`
+
+:::
+
+Wait for GitLab to trigger a backup, then you can [verify backup files](#verify_backup_files).
+
+### Verify Backup Files \{#verify_backup_files}
+
+Execute the following command to check if backup files have been uploaded to object storage:
+
+```bash
+mc ls ${MINIO_ALIAS_NAME}/gitlab-backups
+
+# Output:
+# [2025-06-30 16:33:18 CST] 570KiB STANDARD 1751272314_2025_06_30_17.8.5_gitlab_backup.tar
+# [2025-06-30 18:19:26 CST] 570KiB STANDARD 1751278684_2025_06_30_17.8.5_gitlab_backup.tar
+```
+
+If you can successfully list backup files, it indicates that backup is successful.
+
+## Restore
+
+### Prerequisites
+
+#### Select a Backup to Restore
+
+Use the mc command to get the backup file list:
+
+```bash
+mc ls ${MINIO_ALIAS_NAME}/gitlab-backups
+
+# Output:
+# [2025-06-30 16:33:18 CST] 570KiB STANDARD 1751272314_2025_06_30_17.8.5_gitlab_backup.tar
+# [2025-06-30 18:19:26 CST] 570KiB STANDARD 1751278684_2025_06_30_17.8.5_gitlab_backup.tar
+```
+
+Based on the date information in the backup file name, select a backup you want to restore, and copy the backup ID from the backup file name for later use, such as `1751272314_2025_06_30_17.11.4`.
+
+#### Determine GitLab Instance Restore Method
+
+There are two choices for restoration:
+
+1. Directly restore on the source instance, which will **overwrite** the instance data with the backup data
+2. (**Recommended**) Deploy a new instance to restore data, the new instance needs to meet the following requirements:
+    1. The new instance must have object storage enabled
+    2. The new instance should deploy toolbox component, and [configure the object storage configuration same as the source instance](#deploy_toolbox_component)
+
+### Restore Operations
+
+:::warning
+
+The following operations are all performed on the **target instance**.
+
+:::
+
+Please set the following environment variables first:
+
+```bash
+export NEW_GITLAB_NAMESPACE=<namespace of the new GitLab instance>
+export NEW_GITLAB_NAME=<name of the new GitLab instance>
+```
+
+#### Stop Workloads
+
+To ensure the restore operation proceeds smoothly, you need to stop the sidekiq and webservice components during restoration.
+
+```bash
+kubectl annotate deployment -n ${NEW_GITLAB_NAMESPACE} -l release=${NEW_GITLAB_NAME},app=sidekiq skip-sync="true"
+kubectl scale deployment -n ${NEW_GITLAB_NAMESPACE} -l release=${NEW_GITLAB_NAME},app=sidekiq --replicas=0
+kubectl annotate deployment -n ${NEW_GITLAB_NAMESPACE} -l release=${NEW_GITLAB_NAME},app=webservice skip-sync="true"
+kubectl scale deployment -n ${NEW_GITLAB_NAMESPACE} -l release=${NEW_GITLAB_NAME},app=webservice --replicas=0
+
+# Output:
+# deployment.apps/xx-gitlab-sidekiq-all-in-1-v2 annotated
+# deployment.apps/xx-gitlab-sidekiq-all-in-1-v2 scaled
+# deployment.apps/xx-gitlab-webservice-default annotated
+# deployment.apps/xx-gitlab-webservice-default scaled
+```
+
+#### Execute Restore
+
+Use the following command to enter the terminal of the toolbox pod:
+
+```bash
+export NEW_TOOLBOX_POD_NAME=$(kubectl get pod -n ${NEW_GITLAB_NAMESPACE} | grep ${NEW_GITLAB_NAME}-toolbox | awk '{print $1}')
+kubectl exec -it ${NEW_TOOLBOX_POD_NAME} -n ${NEW_GITLAB_NAMESPACE} -- bash
+```
+
+:::danger
+
+Before restoring the database, all existing tables will be removed to avoid future upgrade problems. Be aware that if you have custom tables in the GitLab database, these tables and all data will be removed.
+
+:::
+
+Enter the following command in the terminal to execute the restore, where **backup ID** needs to be replaced with the desired backup ID, such as `1751272314_2025_06_30_17.11.4`:
+
+```bash
+export BACKUP_ID=<backup ID>
+rm -rf /srv/gitlab/tmp/*
+backup-utility --restore -t ${BACKUP_ID}
+
+# Output:
+# 2025-06-30 15:33:53 UTC -- [DONE]
+# 2025-06-30 15:33:53 UTC -- Source backup for the database ci doesn't exist. Skipping the task
+# 2025-06-30 15:33:53 UTC -- Restoring database ... done
+# 2025-06-30 15:33:53 UTC -- Deleting backup and restore PID file at [/srv/gitlab/tmp/backup_restore.pid] ... done
+# 2025-06-30 15:34:12 UTC -- Restoring repositories ...
+# 2025-06-30 15:34:12 UTC -- Restoring repositories ... done
+# 2025-06-30 15:34:12 UTC -- Deleting backup and restore PID file at [/srv/gitlab/tmp/backup_restore.pid] ... done
+```
+
+When the program completes successfully, the restore process ends.
+
+:::details Notes for Restoring from New Instance
+
+If restoring in a newly deployed instance, after completing the above steps, you need to perform the following additional steps:
+
+**Restore Rails Secrets**
+
+You need to update the Rails secrets of the new instance to match those of the source instance.
+
+Get the Rails secrets content from the source instance:
+
+```bash
+kubectl get secret ${GITLAB_NAME}-rails-secret -n ${GITLAB_NAMESPACE} -o jsonpath='{.data.secrets\.yml}' | base64 --decode
+```
+
+Update the Rails secrets of the new instance. Please refer to [How to Set Rails Secrets](./05_customize_rails_secret.mdx).
+
+**Switch Domain Name**
+
+If the source instance was deployed using a domain name, after restoring from the new instance, you need to switch the domain name of the new instance to that of the source instance to restore business access. Please refer to [Configure Instance Network Access](../install/03_gitlab_deploy.md#network_access) to modify the instance access domain name.
+
+:::
+
+#### Restore Workloads
+
+The sidekiq and webservice components were stopped during restoration and need to be restarted after recovery.
+
+```bash
+kubectl annotate deployment -n ${NEW_GITLAB_NAMESPACE} -l release=${NEW_GITLAB_NAME},app=sidekiq skip-sync-
+kubectl scale deployment -n ${NEW_GITLAB_NAMESPACE} -l release=${NEW_GITLAB_NAME},app=sidekiq --replicas=1
+kubectl annotate deployment -n ${NEW_GITLAB_NAMESPACE} -l release=${NEW_GITLAB_NAME},app=webservice skip-sync-
+kubectl scale deployment -n ${NEW_GITLAB_NAMESPACE} -l release=${NEW_GITLAB_NAME},app=webservice --replicas=1
+
+# Output:
+# deployment.apps/xx-gitlab-sidekiq-all-in-1-v2 annotated
+# deployment.apps/xx-gitlab-sidekiq-all-in-1-v2 scaled
+# deployment.apps/xx-gitlab-webservice-default annotated
+# deployment.apps/xx-gitlab-webservice-default scaled
+```
+
+#### Verify Restore
+
+After waiting for the instance status to return to normal, log in to GitLab to check if the data has been restored successfully. Check items include but are not limited to:
+
+- Groups
+- Repositories
+- Users
+- Merge Requests

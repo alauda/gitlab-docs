@@ -32,17 +32,17 @@ According to the [official upgrade path](https://gitlab-com.gitlab.io/support/to
 - 17.3.6 → 17.5.5
 - 17.5.5 → 17.8.1
 
-Finally, back up the data from 17.8.1 and import it into the platform-deployed 17.8.z instance to complete the data migration.
+Finally, back up the data from 17.8.1 and import it into the `platform-deployed` 17.8.z instance to complete the data migration.
 
 ## Data migration Process
 
-Backup the platform-deployed GitLab and restore it to an all-in-one image deployed GitLab, then upgrade to 17.8.1 using the all-in-one image, and finally restore the data backup to the platform-deployed 17.8.z instance.
+Backup the `platform-deployed` GitLab and restore it to an `all-in-one` image deployed GitLab, then upgrade to 17.8.1 using the `all-in-one` image, and finally restore the data backup to the `platform-deployed` 17.8.z instance.
 
-1. Backup the platform-deployed GitLab 14.0.12;
-2. Restore the backup data to the all-in-one deployed 14.0.12;
-3. Upgrade the all-in-one deployed GitLab to 17.8.1;
-4. Backup the all-in-one deployed 17.8.1;
-5. Restore the all-in-one backup data to the platform-deployed 17.8.z.
+1. Backup the `platform-deployed` GitLab 14.0.12
+2. Restore the backup data to the `all-in-one` deployed 14.0.12
+3. Upgrade the `all-in-one` deployed GitLab to 17.8.1
+4. Backup the `all-in-one` deployed 17.8.1
+5. Restore the `all-in-one` backup data to the `platform-deployed` 17.8.z
 
 :::tip
 For the latest GitLab instance and operator versions, please refer to the [Release Note](../overview/release_notes.mdx).
@@ -52,7 +52,7 @@ For the latest GitLab instance and operator versions, please refer to the [Relea
 
 ### Prerequisites
 
-1. Install kubectl, yq, base64, and other tools on the execution host.
+1. Install [kubectl](https://kubernetes.io/docs/tasks/tools/install-kubectl-linux/#install-kubectl-on-linux), [yq](https://mikefarah.gitbook.io/yq#install) on the execution host.
 2. Configure environment variables (Note: at this point, the gitlab-operator version has not been upgraded and corresponds to the operator version for GitLab 14.0.12)
 
     ```bash
@@ -60,7 +60,7 @@ For the latest GitLab instance and operator versions, please refer to the [Relea
     export GITLAB_NAMESPACE=<gitlab deploy namespace>
     ```
 
-3. Prepare PVCs for the upgrade, which need to be created in the namespace of the old GitLab deployment
+3. Prepare PVCs for the upgrade, which need to be created in the **same namespace** of the old GitLab instance
 
     ```yaml
     ---
@@ -112,12 +112,16 @@ For the latest GitLab instance and operator versions, please refer to the [Relea
 
 ### Data migration Steps
 
-#### Backup the Platform-Deployed GitLab 14.0.12
+#### Backup the `platform-deployed` GitLab 14.0.12
+
+:::warning
+During the backup process, the task-runner container may be killed due to insufficient resources. To avoid this, configure resource requests and limits for the task-runner container (at least 2 CPU and 4 GiB memory).
+:::
 
 1. Enable the task-runner on GitLab 14 to execute backup commands
 
     ```shell
-    $ kubectl patch gitlabofficials ${GITLAB_NAME} -n $GITLAB_NAMESPACE --type='merge' -p='{"spec":{"helmValues":{"gitlab":{"task-runner":{"enabled":"true"}}}}}'
+    $ kubectl patch gitlabofficials.operator.devops.alauda.io ${GITLAB_NAME} -n $GITLAB_NAMESPACE --type='merge' -p='{"spec":{"helmValues":{"gitlab":{"task-runner":{"enabled":"true","resources":{"limits":{"cpu":"2","memory":"4G"}}}}}}}'
     # Execute the command and confirm that the ${GITLAB_NAME}-task-runner deployment exists
     $ kubectl get deploy -n $GITLAB_NAMESPACE ${GITLAB_NAME}-task-runner
     NAME                                    READY   UP-TO-DATE   AVAILABLE   AGE
@@ -146,7 +150,9 @@ For the latest GitLab instance and operator versions, please refer to the [Relea
     # Get the task-runner name, ensure the pod status is running
     $ kubectl get po -n $GITLAB_NAMESPACE -l app=task-runner,release=${GITLAB_NAME}
     gitlab-task-runner-b4459444b-bklh4   1/1     Running   0          84m
-    $ kubectl exec -ti -n $GITLAB_NAMESPACE gitlab-task-runner-b4459444b-bklh4 bash
+
+    $ kubectl exec -ti -n $GITLAB_NAMESPACE gitlab-task-runner-b4459444b-bklh4 -- bash
+
     $ gitlab-rake gitlab:backup:create
     2024-11-01 06:16:06 +0000 -- Dumping database ...
     Dumping PostgreSQL database gitlabhq_production ... [DONE]
@@ -159,9 +165,11 @@ For the latest GitLab instance and operator versions, please refer to the [Relea
     and are not included in this backup. You will need these files to restore a backup.
     Please back them up manually.
     Backup task is done.
+
     # Add permissions to the backup file, use the user of the backup pod, which may be different from the backup pod user.
     $ ls /srv/gitlab/tmp/backups
     17302758xx_xxxx_xx_xx_14.0.12_gitlab_backup.tar
+
     $ chmod 777 /srv/gitlab/tmp/backups/17302758xx_xxxx_xx_xx_14.0.12_gitlab_backup.tar
     $ exit
 
@@ -169,9 +177,9 @@ For the latest GitLab instance and operator versions, please refer to the [Relea
     kubectl get secrets -n ${GITLAB_NAMESPACE} ${GITLAB_NAME}-rails-secret -o jsonpath="{.data['secrets\.yml']}" | base64 --decode | yq -o json > gitlab14-rails-secret.yaml
     ```
 
-#### Restore backup data to all-in-one deployment of 14.0.12
+#### Restore backup data to `all-in-one` deployment of 14.0.12
 
-1.  Use the all-in-one image to deploy 14.0.12 gitlab.
+1.  Use the `all-in-one` image to deploy 14.0.12 gitlab.
 
     Apply the following yaml to the gitlab deployment namespace, the yaml has already mounted the backup pvc (backup-pvc) to the backup directory (if you need to access the gitlab instance during the upgrade process, you need to replace the IP and nodeport port in the yaml).
 
@@ -221,7 +229,7 @@ For the latest GitLab instance and operator versions, please refer to the [Relea
           containers:
             - env:
                 - name: GITLAB_OMNIBUS_CONFIG
-                  value: external_url 'http://192.168.132.128:30855' # External access address, need to replace with the IP and nodeport port of a cluster node
+                  value: external_url 'http://192.168.132.128:30855' # External access address of the `all-in-one gitlab`, need to replace with the IP and nodeport port of a cluster node
               image: gitlab/gitlab-ce:14.0.12-ce.0 # Can be replaced with an image that can be pulled
               imagePullPolicy: IfNotPresent
               name: gitlab
@@ -271,10 +279,14 @@ For the latest GitLab instance and operator versions, please refer to the [Relea
     ```
 
 
-2. Restore the backup data to the 14.0.12 gitlab deployed with all-in-one.
+2. Restore the backup data to the 14.0.12 gitlab deployed with `all-in-one` image.
 
     :::tip
-    There will be database-related errors during the recovery process, and `must be owner` and `does not exist` are expected behaviors, see (https://gitlab.com/gitlab-org/gitlab/-/issues/266988) for details.
+    During the recovery process, database-related errors may occur, for example:
+    - `ERROR:  role "xxx" does not exist`
+    - `ERROR:  function xxx does not exist`
+
+    These errors can be ignored, details can be found at (https://gitlab.com/gitlab-org/gitlab/-/issues/266988).
     :::
 
     ```bash
@@ -320,6 +332,7 @@ For the latest GitLab instance and operator versions, please refer to the [Relea
     # Enter the pod to execute the recovery
     $ kubectl get po -l deploy=gitlab -n $GITLAB_NAMESPACE
     gitlab-98c4b9f4-lcjwn   1/1     Running   0          9s
+
     $ bash check_gitlab.sh gitlab-98c4b9f4-lcjwn
     2024-11-01 16:02:47 - Starting monitoring script for GitLab pod: gitlab-7ff8d674bd-m65nz on port: 30855
     command terminated with exit code 7
@@ -340,15 +353,17 @@ For the latest GitLab instance and operator versions, please refer to the [Relea
     # - ci_jwt_signing_key
     # Replace with the corresponding field data from the backup.
     ##############
-    $ kubectl exec -ti gitlab-98c4b9f4-lcjwn -n $GITLAB_NAMESPACE bash
+    $ kubectl exec -ti gitlab-98c4b9f4-lcjwn -n $GITLAB_NAMESPACE -- bash
     vi /etc/gitlab/gitlab-secrets.json
     exit
+
     # Restart the instance
     $ kubectl delete po -n $GITLAB_NAMESPACE gitlab-98c4b9f4-lcjwn
     # Re-enter the pod, confirm that gitlab is started successfully
     $ kubectl get po -l deploy=gitlab -n $GITLAB_NAMESPACE
     NAME                    READY   STATUS    RESTARTS   AGE
     gitlab-98c4b9f4-lcjwn   1/1     Running   0          9s
+
     $ bash check_gitlab.sh gitlab-98c4b9f4-lcjwn
     2024-11-01 16:02:47 - Starting monitoring script for GitLab pod: gitlab-7ff8d674bd-m65nz on port: 30855
     command terminated with exit code 7
@@ -360,7 +375,7 @@ For the latest GitLab instance and operator versions, please refer to the [Relea
     2024-11-01 16:13:40 - HTTP not ready. Retrying in 10 seconds...
     2024-11-01 16:13:50 - GitLab is ready
 
-    $ kubectl -n $GITLAB_NAMESPACE exec -ti gitlab-98c4b9f4-lcjwn bash
+    $ kubectl -n $GITLAB_NAMESPACE exec -ti gitlab-98c4b9f4-lcjwn -- bash
     # Set gitlab to read-only
     $ gitlab-ctl stop puma
     $ gitlab-ctl stop sidekiq
@@ -370,22 +385,29 @@ For the latest GitLab instance and operator versions, please refer to the [Relea
     # Execute backup
     $ ls /var/opt/gitlab/backups/
     17302758xx_xxxx_xx_xx_14.0.12_gitlab_backup.tar
+
+    # This step will prompt you multiple times to confirm whether to continue.
+    # Please select "yes" each time to proceed.
     $ gitlab-backup restore BACKUP=17302758xx_xxxx_xx_xx_14.0.12
     $ exit
 
     # Restart gitlab
     $ kubectl -n $GITLAB_NAMESPACE delete po gitlab-98c4b9f4-lcjwn
+
     # Check the recovery status
     $ kubectl get po -l deploy=gitlab -n $GITLAB_NAMESPACE
     NAME                    READY   STATUS    RESTARTS   AGE
     gitlab-98c4b9f4-lcjwn   1/1     Running   0          9s
+
+    # Wait for GitLab background data migration tasks to complete
+    # This process may take anywhere from a few minutes to up to 20 minutes, please be patient
     $ bash check_gitlab.sh gitlab-98c4b9f4-lcjwn
     $ kubectl -n $GITLAB_NAMESPACE exec -ti gitlab-98c4b9f4-lcjwn -- gitlab-rake gitlab:check SANITIZE=true
     ```
 
-#### Upgrade all-in-one deployed gitlab to 17.8.1
+#### Upgrade `all-in-one` deployed gitlab to 17.8.1
 
-Use the all-in-one mode to upgrade gitlab to 17.8.1. You need to replace the gitlab image in the upgrade path one by one until you upgrade to 17.8.1.
+Use the `all-in-one` mode to upgrade gitlab to 17.8.1. You need to replace the gitlab image in the upgrade path one by one until you upgrade to 17.8.1.
 
 Upgrade path: 14.0.12 → 14.3.6 → 14.9.5 → 14.10.5 → 15.0.5 → 15.4.6 → 15.11.13 → 16.3.8 → 16.7.9 → 16.11.10 → 17.3.6 → 17.5.5 → 17.8.1
 
@@ -430,7 +452,7 @@ Upgrade path: 14.0.12 → 14.3.6 → 14.9.5 → 14.10.5 → 15.0.5 → 15.4.6 �
     $ kubectl -n $GITLAB_NAMESPACE get po -l deploy=gitlab
     NAME                    READY   STATUS    RESTARTS   AGE
     gitlab-98c4b9f4-lcjwn   1/1     Running   0          9s
-    # 等待 pod 启动后, 检查程序是否启动成功
+    # Wait for the pod to start, then check if the application has started successfully
     $ bash monitor_gitlab.sh gitlab-98c4b9f4-lcjwn
     2024-11-01 16:02:47 - Starting monitoring script for GitLab pod: gitlab-7ff8d674bd-m65nz on port: 30855
     command terminated with exit code 7
@@ -455,7 +477,7 @@ Upgrade path: 14.0.12 → 14.3.6 → 14.9.5 → 14.10.5 → 15.0.5 → 15.4.6 �
 11. Upgrade 17.3.6 to 17.5.5: Replace the image tag with 17.5.5-ce.0, other operations are the same as "14.0.12 to 14.3.6".
 12. Upgrade 17.5.5 to 17.8.1: Replace the image tag with 17.8.1-ce.0, other operations are the same as "14.0.12 to 14.3.6".
 
-### Backup in all-in-one 17.8.1
+### Backup the data from 17.8.1 `all-in-one` instance
 
 In the 17.8.1 deployment pod, execute the backup.
 
@@ -463,7 +485,7 @@ In the 17.8.1 deployment pod, execute the backup.
 kubectl -n $GITLAB_NAMESPACE get po -l deploy=gitlab
 NAME                    READY   STATUS    RESTARTS   AGE
 gitlab-98c4b9f4-lcjwn   1/1     Running   0          9s
-kubectl -n $GITLAB_NAMESPACE exec -ti gitlab-98c4b9f4-lcjwn bash
+kubectl -n $GITLAB_NAMESPACE exec -ti gitlab-98c4b9f4-lcjwn -- bash
 gitlab-ctl stop puma
 gitlab-ctl stop sidekiq
 gitlab-ctl status
@@ -478,7 +500,11 @@ kubectl -n $GITLAB_NAMESPACE cp gitlab-98c4b9f4-lcjwn:/etc/gitlab/gitlab-secrets
 yq -P '{"production": .gitlab_rails}' gitlab-secrets.json -o yaml > gitlab-secrets.yaml
 ```
 
-### Restore all-in-one backup data to platform deployed 17.8.z
+### Restore `all-in-one` backup data to `platform-deployed` 17.8.z
+
+:::warning
+During the restore process, the toolbox container may be killed due to insufficient resources. To avoid this, configure resource requests and limits for the toolbox container (at least 2 CPU and 4 GiB memory).
+:::
 
 1. Deploy gitlab 17.8.z on the platform using the operator and enable the toolbox (note that it needs to be in the same namespace as the old instance), then restore the data to the gitlab 17.8.z deployed by the operator (set the name of the gitlab deployed on the platform to the environment variable NEW_GITLAB_NAME).
 
@@ -490,10 +516,18 @@ yq -P '{"production": .gitlab_rails}' gitlab-secrets.json -o yaml > gitlab-secre
         gitlab:
           toolbox:
             enabled: true
+            resources:
+              limits:
+                cpu: 2
+                memory: 4G
     ```
 
     :::tip
-    During the recovery process, database-related errors may occur, where must be owner and does not exist are expected behavior, details can be found at (https://gitlab.com/gitlab-org/gitlab/-/issues/266988)
+    During the recovery process, database-related errors may occur, for example:
+    - `ERROR:  role "xxx" does not exist`
+    - `ERROR:  function xxx does not exist`
+
+    These errors can be ignored, details can be found at (https://gitlab.com/gitlab-org/gitlab/-/issues/266988).
     :::
 
     ```bash
@@ -527,7 +561,8 @@ yq -P '{"production": .gitlab_rails}' gitlab-secrets.json -o yaml > gitlab-secre
     kubectl get po -n $GITLAB_NAMESPACE -l release=$NEW_GITLAB_NAME,app=toolbox
     NAME READY STATUS RESTARTS AGE
     gitlab-toolbox-58b7db895c-8k99q 1/1 Running 0 119m
-    kubectl exec -ti -n $GITLAB_NAMESPACE gitlab-toolbox-58b7db895c-8k99q bash
+
+    kubectl exec -ti -n $GITLAB_NAMESPACE gitlab-toolbox-58b7db895c-8k99q -- bash
     ls /srv/gitlab/tmp/backups/
     17302758xx_xxxx_xx_xx_17.8.1_gitlab_backup.tar
 
@@ -545,12 +580,10 @@ yq -P '{"production": .gitlab_rails}' gitlab-secrets.json -o yaml > gitlab-secre
     ```
 
 2. Verify that the data after the upgrade is different from the data before the upgrade.
-3. After the data verification is complete, manually clean up the old instance.
+   - Enter the GitLab UI in administrator view and check whether the repositories and user data are normal.
+   - Select some repositories and verify whether the code, branches, and merge requests are functioning properly.
+3. After the data verification is complete, manually clean up the old gitlab instance and the old operator if necessary.
 
 ### FAQ
 
-1. When executing the backup data, the task-runner container is killed, and the request and limit resources need to be added to the task-runner container (at least 2c4g), then restart the task-runner and perform the backup again.
-
-2. When restoring the backup to the 17.8.z deployed by the platform, the toolbox container is killed, and the request and limit resources need to be added to the toolbox container (at least 2c4g).
-
-3. The upgrade backup does not include external attachment images and avatars, so the page cannot display attachment images and uploaded avatars after the upgrade. You can replace the 17.8.z PVC with the 14.0.12 image storage PVC.
+1. The migrated data does not include avatars and attachments, so the new GitLab instance cannot display this content. To resolve this issue, you can replace the upload PVC of GitLab 17.8.z with the PVC used by 14.0.12 or manually copy these data from the old instance to the new instance.

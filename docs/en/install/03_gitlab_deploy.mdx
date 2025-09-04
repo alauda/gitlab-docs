@@ -153,7 +153,7 @@ spec:
           port: 5432 # PostgreSQL instance port
           user: username # PostgreSQL instance access user
           dbName: praefect-db # PostgreSQL instance access database
-          sslMode: disable # PostgreSQL instance SSL mode
+          sslMode: require # PostgreSQL instance SSL mode
         dbSecret:
           key: secret # Key in the PostgreSQL instance secret that stores the password
           secret: praefect-db # Secret for the PostgreSQL database used by Gitaly cluster
@@ -563,7 +563,7 @@ spec:
           port: 5432 # PostgreSQL instance port
           user: gitlab-user # PostgreSQL instance access user
           dbName: gitlab-praefect # PostgreSQL instance access database
-          sslMode: disable
+          sslMode: require
         dbSecret:
           key: password # Key in the PostgreSQL instance secret that stores the password
           secret: praefect-db # Secret for the PostgreSQL database used by Gitaly cluster
@@ -594,9 +594,9 @@ spec:
           storageClass: ceph # Storage class used for attachments, needs to support multi-node read-write (ReadWriteMany)
 ```
 
-## <span id ="gitlab_day2">Next Steps</span>
+## Next Steps \{#gitlab_day2}
 
-### <span id ="gitlab_sso">Configure Single Sign-On (SSO)</span>
+### Configure Single Sign-On (SSO) \{#gitlab_sso}
 
 Configuring SSO involves the following steps:
 
@@ -706,7 +706,7 @@ spec:
           - secret: dex-tls
 ```
 
-### <span id ="gitlab_https">Configure HTTPS</span>
+### Configure HTTPS \{#gitlab_https}
 
 After deploying the GitLab instance, you can configure HTTPS as needed.
 
