@@ -14,8 +14,8 @@ The following table shows the compatibility and support matrix between the Alaud
 
 | Alauda Build of Gitlab Operator Version | Gitlab Version |  ACP Version |
 | --------------------------------- | --------------- | --------------- |
-| v17.11.2                        | v17.11.7         | v4.0 |
-| v17.11.1                        | v17.11.4         | v4.0 |
+| v17.11.2                        | v17.11.7         | v4.0,v4.1 |
+| v17.11.1                        | v17.11.4         | v4.0,v4.1 |
 
 ## v17.11.2
 
@@ -27,6 +27,9 @@ The Alauda Build of Gitlab operator now integrates the community edition of Gitl
 
 To know more about Gitlab v17.11 features, please visit [Gitlab v17.11 Release Blog](https://about.gitlab.com/releases/2025/04/17/gitlab-17-11-released/).
 
+#### AML Template
+
+Before this update, deploying a Gitlab instance with LFS support required first using a template to deploy Gitlab and then manually configuring the LFS feature according to the product documentation, which was complex and error-prone. With this update, you can directly use the `AML Template` to deploy a Gitlab instance with built-in LFS support, simplifying the process and reducing the risk of configuration errors.
 
 ### Fixed Issues
 
