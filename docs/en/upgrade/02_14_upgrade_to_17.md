@@ -19,12 +19,6 @@ Versions 3.16 and 3.18 support GitLab versions that lag behind the official vers
 
 ## Process Overview
 
-:::warning
-The time required for the upgrade varies significantly depending on the size of the GitLab data. It may take several days to complete the upgrade, **so it's necessary to evaluate the maintenance window in advance**.
-
-Test data: Includes 3 projects (one large project of 666MB, 2 empty projects), backup file size of 668MB, upgrade time of 8 hours.
-:::
-
 ### Data Migration Path
 
 According to the [official upgrade path](https://gitlab-com.gitlab.io/support/toolbox/upgrade-path/?current=14.0.12&target=17.8.1&distro=docker&edition=ce) documentation, the data migration path is as follows:
@@ -56,6 +50,28 @@ Back up the `platform-deployed` GitLab and restore it to an `all-in-one` image d
 
 :::tip
 For the latest GitLab instance and operator versions, please refer to the [Release Note](../overview/release_notes.mdx).
+:::
+
+:::tip Migration Duration
+The migration process involves database and repository backup/restore operations:
+
+- Larger databases increase migration time.
+- A higher number of repositories or larger single repositories significantly extends the duration.
+- Storage performance also impacts efficiency — using topolvm is recommended for better performance.
+
+Test setup:
+
+- One large repository (~600 MB), others are small initial repositories
+- GitLab instance: 6,700 issues, 3,600 merge requests
+
+|Migration Step	| Key Factor	| 1,000 Repos	 |10,000 Repos|
+|----|---|---|---|
+|Back up platform-deployed GitLab 14.0.12	| Repo size & count	| 10 min	| 30 min|
+|Restore to all-in-one GitLab 14.0.12	|Repo size & count	| 20 min	| 1 hr|
+|Rolling upgrade to GitLab 17.8.1	| Database size	| 1 hr 30 min	| 1 hr 40 min|
+|Back up all-in-one GitLab 17.8.1	| Repo size & count	| 3 min	| 10 min|
+|Restore to platform-deployed GitLab | Repo size & count	| 30 min	| 1 hr|
+
 :::
 
 
@@ -262,7 +278,14 @@ For the latest GitLab instance and operator versions, please refer to the [Relea
 
       echo "Waiting for migrations to finish..."
       kubectl -n $GITLAB_NAMESPACE cp finalize_migrations.sql $new_pod_name:/tmp/finalize_migrations.sql
-      kubectl -n $GITLAB_NAMESPACE exec -ti $new_pod_name -- bash -c "gitlab-psql -t -A -f /tmp/finalize_migrations.sql > /tmp/run_migration_tasks.sh && bash -x /tmp/run_migration_tasks.sh"
+      for i in {1..3}; do
+        echo "Running migration tasks (attempt $i/3)..."
+        if kubectl -n $GITLAB_NAMESPACE exec -ti $new_pod_name -- bash -c "gitlab-psql -t -A -f /tmp/finalize_migrations.sql > /tmp/run_migration_tasks.sh && xargs -d \"\n\" -P 3 -I {} bash -c \"{}\" < /tmp/run_migration_tasks.sh"; then
+          echo "Migration tasks completed successfully"
+          break
+        fi
+        sleep 20
+      done
       bash monitor_gitlab.sh $new_pod_name
       echo "Upgraded to ${version} successfully"
     done
@@ -478,10 +501,10 @@ For the latest GitLab instance and operator versions, please refer to the [Relea
                   protocol: TCP
               resources:
                 limits:
-                  cpu: "4"
+                  cpu: "8"
                   memory: 8Gi
                 requests:
-                  cpu: 2
+                  cpu: 4
                   memory: "4Gi"
               securityContext:
                 privileged: true
@@ -552,6 +575,22 @@ For the latest GitLab instance and operator versions, please refer to the [Relea
 
     # Copy the gitlab-secrets.json to the pod
     kubectl -n $GITLAB_NAMESPACE cp all-in-one-gitlab-secrets.json $pod_name:/etc/gitlab/gitlab-secrets.json
+    ```
+
+    Disable unnecessary components.
+
+    ```bash
+    cat <<EOF >> gitlab.rb
+    prometheus['enable'] = false
+    gitlab_kas['enable'] = false
+    redis_exporter['enable'] = false
+    gitlab_exporter['enable'] = false
+    postgres_exporter['enable'] = false
+    sidekiq['enable'] = false
+    EOF
+
+    # Copy the gitlab.rb to the pod
+    kubectl -n $GITLAB_NAMESPACE cp gitlab.rb $pod_name:/etc/gitlab/gitlab.rb
     ```
 
     Restart the pod and wait for it to start up.
