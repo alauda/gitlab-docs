@@ -16,10 +16,11 @@ You can read the [official upgrade documentation](https://docs.gitlab.com/update
 
 The table below contains the complete upgrade path. When upgrading, you need to upgrade the Operator and GitLab instance versions in sequence.
 
-| No  | Alauda Build of GitLab Operator Version |
-| --- | ---------------- |
-| 1   | 17.8.z           |
-| 2   | 17.11.z          |
+| No  | Alauda Build of GitLab Operator Version | Requirements |
+| --- | ---------------- | ----------------------------- |
+| 1   | 17.8.z           | -               |
+| 2   | 17.11.z          | -               |
+| 3   | 18.2.z          | [**PostgreSQL 16** (upgrade required)](../install/02_gitlab_credential.mdx#pg-requirements)  |
 
 :::info
 In the version numbers above, the `.z` indicates the latest available patch version for that minor release.
@@ -36,9 +37,10 @@ If your GitLab version is lower than `17.8.5`, please refer to the [GitLab Data 
 :::warning
 To safely upgrade your GitLab version to a new version, please note the following:
 
-1. Before upgrading the GitLab instance, please complete the data backup of the instance.
-2. Upgrading GitLab takes some time, depending on the GitLab data size and the version gap between the current version and target version (number of upgrades)
-3. The instance will be unavailable during the upgrade process.
+1. **PostgreSQL Version Check**: [Ensure your PostgreSQL version meets the requirements for your target GitLab version](../install/02_gitlab_credential.mdx#pg-requirements)
+2. Before upgrading the GitLab instance, please complete the data backup of the instance.
+3. Upgrading GitLab takes some time, depending on the GitLab data size and the version gap between the current version and target version (number of upgrades)
+4. The instance will be unavailable during the upgrade process.
 :::
 
 When upgrading, you need to upgrade the <ExternalSiteLink name="acp" href="extend/operator.html#upgrading-operators" children="Operator" /> version and instance version in sequence according to the upgrade path. Upgrading the Operator will not automatically upgrade the instance version, and the upgraded Operator will not manage old GitLab instances, so you need to manually trigger the instance upgrade in time.
