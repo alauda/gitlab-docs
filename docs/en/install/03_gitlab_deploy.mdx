@@ -68,7 +68,7 @@ According to community recommendations and practices, a non-high-availability Gi
 
 **PostgreSQL**
 
-- The PostgreSQL component version currently required by GitLab is v16. It is recommended to deploy PostgreSQL instances using the PostgreSQL Operator provided by the platform, and then complete PostgreSQL integration by configuring access credentials.
+- For supported PostgreSQL versions, please refer to the [version compatibility matrix](./02_gitlab_credential.mdx#pg-requirements). It is recommended to deploy PostgreSQL instances using the platform-provided PostgreSQL Operator, and to integrate PostgreSQL by configuring the appropriate access credentials.
 
    - PostgreSQL access is achieved by configuring a `secret` resource with specific format content. See [Configure Redis, PostgreSQL, and Account Credentials](./02_gitlab_credential.mdx) for details.
 
