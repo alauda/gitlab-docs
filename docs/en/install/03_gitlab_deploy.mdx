@@ -610,17 +610,26 @@ Create the following Oauth2Client resource in the global cluster to register the
 apiVersion: dex.coreos.com/v1
 kind: OAuth2Client
 name: OIDC
+id: gitlab-dex # Client ID
+secret: Z2l0bGFiLW9mZmljaWFsLTAK # Client secret
+redirectURIs:
+  - <gitlab-host>/users/auth/dex/callback # GitLab authentication callback address, where <gitlab-host> is replaced with the GitLab instance access address
 metadata:
   name: m5uxi3dbmiwwizlyzpzjzzeeeirsk # This value is calculated based on the hash of the id field, online calculator: https://go.dev/play/p/QsoqUohsKok
   namespace: cpaas-system
 alignPasswordDB: true
-id: gitlab-dex # Client ID
 public: false
-redirectURIs:
-  - <gitlab-host>/users/auth/dex/callback # GitLab authentication callback address, where <gitlab-host> is replaced with the GitLab instance access address
-secret: Z2l0bGFiLW9mZmljaWFsLTAK # Client secret
 spec: {}
 ```
+
+| Field | Description | Example |
+|-------|-------------|---------|
+|name| The display name of the resource. | OIDC|
+|id| The client ID for SSO authentication. Any value is allowed, except alauda-dex, which is reserved and may cause conflicts.| gitlab-dex |
+|secret| The client secret used for SSO authentication. Can be set to any value. | Z2l0bGFiLW9mZmljaWFsLTAK|
+|redirectURIs | GitLab authentication callback URL, formatted as `<gitlab-host>/users/auth/dex/callback`. | https://example.gitlab.com/users/auth/dex/callback|
+|metadata.name| The resource name, which must be calculated based on the hash of the `id` field. You can use online hash calculators such as https://go.dev/play/p/QsoqUohsKok to generate it. | m5uxi3dbmiwwizlyzpzjzzeeeirsk |
+|metadata.namespace| The platform system namespace, Must be `cpaas-system`. | cpaas-system|
 
 Prepare the configuration content according to the comments in the JSON below.
 
@@ -684,10 +693,14 @@ If the platform is accessed via HTTPS and uses a self-signed certificate, you ne
 
 In the `cpaas-system` namespace of the global cluster, find the secret named `dex.tls`, get the `ca.crt` content from the secret, save it as a new secret, and create it in the namespace of the GitLab instance.
 
+:::warning Certificate Format
+The certificate must be in PEM format.
+:::
+
 ```yaml
 apiVersion: v1
 data:
-  ca.crt: <base64 encode data>
+  ca.crt: <base64-encode a PEM-formatted certificate>
 kind: Secret
 metadata:
   name: dex-tls
