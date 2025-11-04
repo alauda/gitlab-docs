@@ -511,6 +511,8 @@ Test setup:
               terminationMessagePath: /dev/termination-log
               terminationMessagePolicy: File
               volumeMounts:
+                - mountPath: /dev/shm
+                  name: dshm
                 - mountPath: /var/opt/gitlab/backups
                   name: backup
                   subPath: backups
@@ -529,6 +531,10 @@ Test setup:
           securityContext: {}
           terminationGracePeriodSeconds: 30
           volumes:
+            - name: dshm
+              emptyDir:
+                medium: Memory
+                sizeLimit: 512Mi
             - name: backup
               persistentVolumeClaim:
                 claimName: backup-pvc
@@ -778,7 +784,7 @@ The namespace of the new gitlab instance must be the same as the namespace of th
 
 2. Enable the toolbox component for the new GitLab instance.
 
-    ```yaml
+    ```bash
     kubectl patch gitlabofficial.operator.alaudadevops.io ${NEW_GITLAB_NAME} -n $GITLAB_NAMESPACE --type='merge' -p='
     {
       "spec": {
@@ -894,7 +900,7 @@ The namespace of the new gitlab instance must be the same as the namespace of th
     kubectl patch deploy ${NEW_GITLAB_NAME}-sidekiq-all-in-1-v2 -n $GITLAB_NAMESPACE --type='json' -p='[{"op":"remove","path":"/metadata/annotations/skip-sync"}]'
     kubectl patch deploy ${NEW_GITLAB_NAME}-toolbox -n $GITLAB_NAMESPACE --type='json' -p='[{"op":"remove","path":"/metadata/annotations/skip-sync"}]'
 
-    kubectl delete pod -lrelease=fm-test-gitlab -n $GITLAB_NAMESPACE
+    kubectl delete pod -lrelease=${NEW_GITLAB_NAME} -n $GITLAB_NAMESPACE
     kubectl scale deploy ${NEW_GITLAB_NAME}-webservice-default -n $GITLAB_NAMESPACE --replicas 1
     kubectl scale deploy ${NEW_GITLAB_NAME}-sidekiq-all-in-1-v2 -n $GITLAB_NAMESPACE --replicas 1
     ```
