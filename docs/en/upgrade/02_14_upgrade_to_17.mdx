@@ -127,22 +127,76 @@ For the latest GitLab instance and operator versions, please refer to the [Relea
 
 4. Prepare the images needed for the upgrade. Download each version of the image from the attachments and push them to an image repository that the GitLab deployment cluster can pull from. Image download links:
 
-    ```shell
-    # amd images
-    https://cloud.alauda.cn/attachments/knowledge/242090509/gitlab-ce-14-0-12-amd.tgz
-    https://cloud.alauda.cn/attachments/knowledge/242090509/gitlab-ce-14-3-6-amd.tgz
-    https://cloud.alauda.cn/attachments/knowledge/242090509/gitlab-ce-14-9-5-amd.tgz
-    https://cloud.alauda.cn/attachments/knowledge/242090509/gitlab-ce-14-10-5-amd.tgz
-    https://cloud.alauda.cn/attachments/knowledge/242090509/gitlab-ce-15-0-5-amd.tgz
-    https://cloud.alauda.cn/attachments/knowledge/242090509/gitlab-ce-15-4-6-amd.tgz
-    https://cloud.alauda.cn/attachments/knowledge/242090509/gitlab-ce-15-11-13-amd.tgz
-    https://cloud.alauda.cn/attachments/knowledge/242090509/gitlab-ce-16-3-8-amd.tgz
-    https://cloud.alauda.cn/attachments/knowledge/242090509/gitlab-ce-16-7-9-amd.tgz
-    https://cloud.alauda.cn/attachments/knowledge/242090509/gitlab-ce-16-11-10-amd.tgz
-    https://cloud.alauda.cn/attachments/knowledge/242090509/gitlab-ce-17-3-6-amd.tgz
-    https://cloud.alauda.cn/attachments/knowledge/242090509/gitlab-ce-17-5-5-amd.tgz
-    https://cloud.alauda.cn/attachments/knowledge/242090509/gitlab-ce-17-8-1-amd.tgz
-    ```
+    <Tabs>
+      <Tab label="China Region">
+        ```shell
+        # amd images
+        https://cloud.alauda.cn/attachments/knowledge/242090509/gitlab-ce-14-0-12-amd.tgz
+        https://cloud.alauda.cn/attachments/knowledge/242090509/gitlab-ce-14-3-6-amd.tgz
+        https://cloud.alauda.cn/attachments/knowledge/242090509/gitlab-ce-14-9-5-amd.tgz
+        https://cloud.alauda.cn/attachments/knowledge/242090509/gitlab-ce-14-10-5-amd.tgz
+        https://cloud.alauda.cn/attachments/knowledge/242090509/gitlab-ce-15-0-5-amd.tgz
+        https://cloud.alauda.cn/attachments/knowledge/242090509/gitlab-ce-15-4-6-amd.tgz
+        https://cloud.alauda.cn/attachments/knowledge/242090509/gitlab-ce-15-11-13-amd.tgz
+        https://cloud.alauda.cn/attachments/knowledge/242090509/gitlab-ce-16-3-8-amd.tgz
+        https://cloud.alauda.cn/attachments/knowledge/242090509/gitlab-ce-16-7-9-amd.tgz
+        https://cloud.alauda.cn/attachments/knowledge/242090509/gitlab-ce-16-11-10-amd.tgz
+        https://cloud.alauda.cn/attachments/knowledge/242090509/gitlab-ce-17-3-6-amd.tgz
+        https://cloud.alauda.cn/attachments/knowledge/242090509/gitlab-ce-17-5-5-amd.tgz
+        https://cloud.alauda.cn/attachments/knowledge/242090509/gitlab-ce-17-8-1-amd.tgz
+
+        # arm images
+        https://cloud.alauda.cn/attachments/knowledge/242090509/gitlab-ce-14-0-12-arm.tgz
+        https://cloud.alauda.cn/attachments/knowledge/242090509/gitlab-ce-14-3-6-arm.tgz
+        https://cloud.alauda.cn/attachments/knowledge/242090509/gitlab-ce-14-9-5-arm.tgz
+        https://cloud.alauda.cn/attachments/knowledge/242090509/gitlab-ce-14-10-5-arm.tgz
+        https://cloud.alauda.cn/attachments/knowledge/242090509/gitlab-ce-15-0-5-arm.tgz
+        https://cloud.alauda.cn/attachments/knowledge/242090509/gitlab-ce-15-4-6-arm.tgz
+        https://cloud.alauda.cn/attachments/knowledge/242090509/gitlab-ce-15-11-13-arm.tgz
+        https://cloud.alauda.cn/attachments/knowledge/242090509/gitlab-ce-16-3-8-arm.tgz
+        https://cloud.alauda.cn/attachments/knowledge/242090509/gitlab-ce-16-7-9-arm.tgz
+        https://cloud.alauda.cn/attachments/knowledge/242090509/gitlab-ce-16-11-10-arm.tgz
+        https://cloud.alauda.cn/attachments/knowledge/242090509/gitlab-ce-17-3-6-arm.tgz
+        https://cloud.alauda.cn/attachments/knowledge/242090509/gitlab-ce-17-5-5-arm.tgz
+        https://cloud.alauda.cn/attachments/knowledge/242090509/gitlab-ce-17-8-1-arm.tgz
+        ```
+      </Tab>
+
+      <Tab label="Other Regions">
+        ```shell
+        # amd images
+        https://cloud.alauda.io/attachments/knowledge/242090509/gitlab-ce-14-0-12-amd.tgz
+        https://cloud.alauda.io/attachments/knowledge/242090509/gitlab-ce-14-3-6-amd.tgz
+        https://cloud.alauda.io/attachments/knowledge/242090509/gitlab-ce-14-9-5-amd.tgz
+        https://cloud.alauda.io/attachments/knowledge/242090509/gitlab-ce-14-10-5-amd.tgz
+        https://cloud.alauda.io/attachments/knowledge/242090509/gitlab-ce-15-0-5-amd.tgz
+        https://cloud.alauda.io/attachments/knowledge/242090509/gitlab-ce-15-4-6-amd.tgz
+        https://cloud.alauda.io/attachments/knowledge/242090509/gitlab-ce-15-11-13-amd.tgz
+        https://cloud.alauda.io/attachments/knowledge/242090509/gitlab-ce-16-3-8-amd.tgz
+        https://cloud.alauda.io/attachments/knowledge/242090509/gitlab-ce-16-7-9-amd.tgz
+        https://cloud.alauda.io/attachments/knowledge/242090509/gitlab-ce-16-11-10-amd.tgz
+        https://cloud.alauda.io/attachments/knowledge/242090509/gitlab-ce-17-3-6-amd.tgz
+        https://cloud.alauda.io/attachments/knowledge/242090509/gitlab-ce-17-5-5-amd.tgz
+        https://cloud.alauda.io/attachments/knowledge/242090509/gitlab-ce-17-8-1-amd.tgz
+
+        # arm images
+        https://cloud.alauda.io/attachments/knowledge/242090509/gitlab-ce-14-0-12-arm.tgz
+        https://cloud.alauda.io/attachments/knowledge/242090509/gitlab-ce-14-3-6-arm.tgz
+        https://cloud.alauda.io/attachments/knowledge/242090509/gitlab-ce-14-9-5-arm.tgz
+        https://cloud.alauda.io/attachments/knowledge/242090509/gitlab-ce-14-10-5-arm.tgz
+        https://cloud.alauda.io/attachments/knowledge/242090509/gitlab-ce-15-0-5-arm.tgz
+        https://cloud.alauda.io/attachments/knowledge/242090509/gitlab-ce-15-4-6-arm.tgz
+        https://cloud.alauda.io/attachments/knowledge/242090509/gitlab-ce-15-11-13-arm.tgz
+        https://cloud.alauda.io/attachments/knowledge/242090509/gitlab-ce-16-3-8-arm.tgz
+        https://cloud.alauda.io/attachments/knowledge/242090509/gitlab-ce-16-7-9-arm.tgz
+        https://cloud.alauda.io/attachments/knowledge/242090509/gitlab-ce-16-11-10-arm.tgz
+        https://cloud.alauda.io/attachments/knowledge/242090509/gitlab-ce-17-3-6-arm.tgz
+        https://cloud.alauda.io/attachments/knowledge/242090509/gitlab-ce-17-5-5-arm.tgz
+        https://cloud.alauda.io/attachments/knowledge/242090509/gitlab-ce-17-8-1-arm.tgz
+        ```
+      </Tab>
+    </Tabs>
+
 
 5. Prepare the scripts needed for the upgrade.
 
@@ -245,7 +299,23 @@ For the latest GitLab instance and operator versions, please refer to the [Relea
       17.8.1-ce.0
     )
 
+    STATE_FILE="upgrade_state.log"
+    touch "$STATE_FILE"
+
+    is_done() {
+      grep -Fxq "$1" "$STATE_FILE"
+    }
+
+    mark_done() {
+      echo "$1" >> "$STATE_FILE"
+    }
+
     for version in "${versions[@]}"; do
+      if is_done "$version"; then
+        echo "Version ${version} already processed, skipping..."
+        continue
+      fi
+
       echo "Upgrading to ${version}..."
       new_image="${image%:*}:${version}"
       kubectl -n $GITLAB_NAMESPACE set image deployment/gitlab gitlab=$new_image
@@ -265,7 +335,10 @@ For the latest GitLab instance and operator versions, please refer to the [Relea
       kubectl -n $GITLAB_NAMESPACE exec -ti $new_pod_name -- bash -c "gitlab-psql -t -A -f /tmp/finalize_migrations.sql > /tmp/run_migration_tasks.sh && bash -x /tmp/run_migration_tasks.sh"
       bash monitor_gitlab.sh $new_pod_name
       echo "Upgraded to ${version} successfully"
+      mark_done "$version"
     done
+
+    echo "All upgrades completed successfully!"
     EOF
     ```
 
@@ -413,13 +486,12 @@ For the latest GitLab instance and operator versions, please refer to the [Relea
 
     ```bash
     export NODE_IP=<node_ip>
+    export GITLAB_IMAGE=<registry-host>/gitlab/gitlab-ce:14.0.12-ce.0
     ```
 
     Create the `all-in-one` GitLab instance.
 
     ```bash
-    export GITLAB_IMAGE=<registry-host>/gitlab/gitlab-ce:14.0.12-ce.0
-
     kubectl apply -f - <<EOF
     apiVersion: v1
     kind: Service
@@ -882,9 +954,15 @@ The namespace of the new gitlab instance must be the same as the namespace of th
 
 1. The migrated data does not include avatars and attachments, so the new GitLab instance cannot display this content. To resolve this issue, you can replace the upload PVC of GitLab 17.8.z with the PVC used by 14.0.12.
 
+    Set the environment variable for the uploads pvc name:
+
     ```bash
     export UPLOADS_PVC_NAME=<name of the uploads pvc>
+    ```
 
+    Patch the new GitLab instance to use the uploads PVC:
+
+    ```bash
     kubectl patch gitlabofficials.operator.alaudadevops.io ${NEW_GITLAB_NAME} -n $GITLAB_NAMESPACE --type='json' -p='
     {
       "spec": {
