@@ -42,6 +42,14 @@ According to community recommendations and practices, a non-high-availability Gi
 
 **Storage**
 
+::: tip Storage Selection Guide
+| Component | Supported Storage Type | Description |
+|---| ---| ---|
+| Gitaly Storage | block storage (e.g., Ceph RBD)<br />file storage (e.g., Ceph FS) | For production environments, it is recommended to use block storage with storage performance meeting the following requirements: read IOPS ≥ 8,000 and write IOPS ≥ 2,000. |
+| Upload Storage | object storage (e.g., MinIO)<br />file storage (e.g., Ceph FS) | For production environments, it is recommended to use object storage.<br />The sequential read/write throughput of the storage disk (with a 1 MB block size) should not be lower than 100 MiB/s. |
+
+:::
+
 - Common storage methods provided by the platform can be used for GitLab, such as storage classes, persistent volume claims, node storage, etc.
 
    - TopoLVM storage class is recommended for Gitaly storage
