@@ -370,19 +370,41 @@ Test setup:
 1. Enable the task-runner component on GitLab 14 to execute backup commands
 
     ```bash
-    kubectl patch gitlabofficials.operator.devops.alauda.io ${GITLAB_NAME} -n $GITLAB_NAMESPACE --type='merge' -p='
+    # generate the image repository and tag for the task-runner based on the gitaly image
+    image=$(kubectl get pod ${GITLAB_NAME}-gitaly-0 -n $GITLAB_NAMESPACE -o jsonpath='{.spec.containers[0].image}')
+    tag=${image##*:}
+    registry=${image%%/*}
+
+    echo "registry: ${registry}"
+    echo "tag: ${tag}"
+
+    kubectl patch gitlabofficials.operator.devops.alauda.io "${GITLAB_NAME}" \
+      -n "$GITLAB_NAMESPACE" \
+      --type=merge \
+      -p "$(cat <<EOF
     {
       "spec": {
         "helmValues": {
           "gitlab": {
             "task-runner": {
               "enabled": "true",
-              "resources": { "limits": { "cpu": "2", "memory": "4G" } }
+              "image": {
+                "repository": "${registry}/devops/gitlab-org/build/cng/gitlab-task-runner-ce",
+                "tag": "${tag}"
+              },
+              "resources": {
+                "limits": {
+                  "cpu": "2",
+                  "memory": "4G"
+                }
+              }
             }
           }
         }
       }
-    }'
+    }
+    EOF
+    )"
     # Output:
     # gitlabofficial.operator.devops.alauda.io/xxx patched
 
