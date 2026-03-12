@@ -1,0 +1,87 @@
+---
+weight: 120
+---
+
+# How to Configure Content Security Policy (CSP)
+
+This article describes how to configure the Content Security Policy (CSP) for GitLab to address common security findings from penetration testing.
+
+Applicable scenarios:
+
+- Penetration testing reports CSP-related issues (e.g., missing directives, overly permissive sources)
+- Hardening GitLab instance security posture
+
+## Background
+
+Content Security Policy (CSP) is an HTTP response header that helps prevent cross-site scripting (XSS), clickjacking, and other code injection attacks by controlling which resources the browser is allowed to load.
+
+By default, GitLab includes a CSP configuration, but some directives may be overly permissive (e.g., allowing `http:` and `https:` wildcard sources), which can be flagged in penetration testing.
+
+## Prerequisites
+
+- A GitLab instance has been deployed according to the [GitLab Instance Deployment](../install/03_gitlab_deploy.mdx) documentation.
+- Penetration testing results are available for reference (e.g., from OWASP ZAP).
+
+## Configuring CSP
+
+Modify the GitLab instance CR configuration to enable and customize CSP directives.
+
+> Replace `http://gitlab.example.com` with the actual external URL of your GitLab instance.
+
+```yaml
+spec:
+  helmValues:
+    global:
+      appConfig:
+        contentSecurityPolicy:
+          enabled: true
+          report_only: false
+          directives:
+            form_action: "'self' http://gitlab.example.com"
+            img_src: "'self' data: blob: http://gitlab.example.com"
+            media_src: "'self' data: blob: http://gitlab.example.com"
+```
+
+### Directive Descriptions
+
+| Directive | Purpose | Recommendation |
+| --------- | ------- | -------------- |
+| `form_action` | Controls which URLs forms can submit data to. The default value `'self' https: http:` allows submission to any address. | Restrict to `'self'` and the GitLab instance URL. |
+| `img_src` | Controls which sources images can be loaded from. The default value includes `http:` and `https:` wildcards. | Restrict to `'self'`, `data:`, `blob:`, and the GitLab instance URL. |
+| `media_src` | Controls which sources media (audio/video) can be loaded from. Same issue as `img_src`. | Restrict to `'self'`, `data:`, `blob:`, and the GitLab instance URL. |
+
+## Optional: Removing unsafe-eval and unsafe-inline
+
+For stricter security requirements, you can additionally remove `unsafe-eval` from `script-src` and `unsafe-inline` from `style-src`:
+
+```yaml
+spec:
+  helmValues:
+    global:
+      appConfig:
+        contentSecurityPolicy:
+          enabled: true
+          report_only: false
+          directives:
+            form_action: "'self' http://gitlab.example.com"
+            img_src: "'self' data: blob: http://gitlab.example.com"
+            media_src: "'self' data: blob: http://gitlab.example.com"
+            script_src: "'strict-dynamic' 'self' https://www.google.com/recaptcha/ https://www.recaptcha.net"
+            style_src: "'self'"
+```
+
+> **Warning:** Removing `unsafe-eval` and `unsafe-inline` may cause the following known issues:
+>
+> - Navigation dropdown menus may render incorrectly (positioned at the top of the page).
+> - Snippet script editing may not function properly.
+>
+> Evaluate these trade-offs based on your security requirements before applying this configuration. You can use `report_only: true` to test the policy without enforcing it.
+
+## Verification
+
+After applying the configuration, wait for the GitLab instance to complete redeployment, then verify:
+
+1. Open the GitLab web interface in a browser.
+2. Open the browser developer tools (F12) and check the **Network** tab.
+3. Inspect the response headers of any page request and confirm the `Content-Security-Policy` header reflects the configured directives.
+4. Check the **Console** tab for any CSP violation errors that might indicate broken functionality.
