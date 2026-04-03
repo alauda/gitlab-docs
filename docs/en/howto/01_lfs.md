@@ -33,7 +33,7 @@ The attachment storage varies depending on the deployment method:
 - GitLab instances deployed using the HostPath method use node storage. Due to the difficulty of expanding node storage, this method is not recommended for production environments.
 - GitLab instances deployed using storage classes or specified PVC methods both use PVC as the storage medium.
 
-### Using Object Storage for LFS Files (Recommended)
+### Using Object Storage for LFS Files (Recommended) {#using-object-storage-for-lfs-files-recommended}
 
 GitLab officially recommends using object storage to save LFS files.
 

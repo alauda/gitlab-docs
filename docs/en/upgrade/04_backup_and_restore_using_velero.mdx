@@ -14,7 +14,7 @@ This solution is applicable to GitLab instances running **version 17.8 or later*
 
 If your GitLab instance is already configured with object storage, we recommend prioritizing the [official backup and restore solution](./03_official_backup_and_restore.mdx).
 
-[How to determine if object storage is enabled?](./03_official_backup_and_restore.mdx#scope_of_application)
+[How to determine if object storage is enabled?](./03_official_backup_and_restore.mdx#applicability)
 
 :::
 
@@ -742,24 +742,24 @@ The new instance CR resource may need the following modifications. Please make c
    - **Modification recommendations**:
      - (**Recommended**) Change the original instance's domain to a temporary domain, leave the new instance unchanged
      - Keep the original instance's domain unchanged, change the new instance's domain to a new one
-   - **How to modify**: Please refer to [Configure Instance Network Access](../install/03_gitlab_deploy.md#network_access) to modify the instance access domain name.
+   - **How to modify**: Please refer to [Configure Instance Network Access](../install/03_gitlab_deploy.mdx#network_access) to modify the instance access domain name.
 2. **NodePort**:
    - **Applicable scenario**: Original instance was deployed via NodePort
    - **Why modify**: Identical NodePorts in service resources created by old and new instances will cause conflicts, leading to failure in creating the new instance's service resources
    - **Modification recommendations**:
      - (**Recommended**) Change the original instance's NodePort to a temporary port, leave the new instance unchanged
      - Keep the original instance's NodePort unchanged, change the new instance's NodePort to a new port
-   - **How to modify**: Please refer to [Configure Instance Network Access](../install/03_gitlab_deploy.md#network_access) to modify the instance access configuration.
+   - **How to modify**: Please refer to [Configure Instance Network Access](../install/03_gitlab_deploy.mdx#network_access) to modify the instance access configuration.
 3. **Storage Class**:
    - **Applicable scenario**: Original instance was deployed with storage class and there's a change in storage class between old and new instances (e.g., original used NFS, new uses Ceph)
    - **Why modify**: If not modified, the operator will still use the old storage class to create PVCs, which will conflict with the restored PVCs
    - **Modification recommendation**: Change the storage class to the correct value
-   - **How to modify**: Please refer to [Configure Instance Storage](../install/03_gitlab_deploy.md#storage) to modify the instance storage configuration.
+   - **How to modify**: Please refer to [Configure Instance Storage](../install/03_gitlab_deploy.mdx#storage) to modify the instance storage configuration.
 4. **PostgreSQL Connection Information**:
    - **Applicable scenario**: New instance and old instance plans to use different PostgreSQL instances or databases
    - **Why modify**: If not modified, the new instance will still connect to the old PostgreSQL instance or database
    - **Modification recommendation**: Change the PostgreSQL connection information to the correct values
-   - **How to modify**: Please refer to [Configure PostgreSQL Access Credential Configuration](../install/03_gitlab_deploy.md#configure-postgresql-credentials) to modify the PostgreSQL access credential configuration.
+   - **How to modify**: Please refer to [Configure PostgreSQL Access Credential Configuration](../install/03_gitlab_deploy.mdx#configure-postgresql-credentials) to modify the PostgreSQL access credential configuration.
 
 #### Deploy Gitlab CE Operator
 
