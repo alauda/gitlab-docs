@@ -6,7 +6,7 @@ weight: 50
 
 This solution is based on GitLab's official backup and restore approach. For detailed information, please refer to the [GitLab official documentation](https://docs.gitlab.com/ee/administration/backup_restore/index.html).
 
-## Applicability
+## Applicability \{#applicability}
 
 This solution is only applicable to GitLab instances running **version 17.8 or later** that are configured with [object storage](https://docs.gitlab.com/administration/object_storage/).
 
@@ -415,7 +415,7 @@ Update the Rails secrets of the new instance. Please refer to [How to Set Rails 
 
 **Switch Domain Name**
 
-If the source instance was deployed using a domain name, after restoring from the new instance, you need to switch the domain name of the new instance to that of the source instance to restore business access. Please refer to [Configure Instance Network Access](../install/03_gitlab_deploy.md#network_access) to modify the instance access domain name.
+If the source instance was deployed using a domain name, after restoring from the new instance, you need to switch the domain name of the new instance to that of the source instance to restore business access. Please refer to [Configure Instance Network Access](../install/03_gitlab_deploy.mdx#network_access) to modify the instance access domain name.
 
 :::
 
