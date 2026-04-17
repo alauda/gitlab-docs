@@ -1,0 +1,79 @@
+# Gitaly `PermissionDenied` Caused by Clock Skew
+
+## Problem Description
+
+- Accessing repository-related pages in the GitLab UI returns HTTP 500.
+- Gitaly pod logs contain the keyword:
+
+  ```
+  finished unary call with code PermissionDenied
+  ```
+
+- The system time of the Gitaly pod and that of the `webservice` / `sidekiq` pods differ by several seconds or more.
+
+## Root Cause
+
+Gitaly authenticates its clients (`webservice`, `sidekiq`) with a JWT whose claims include a timestamp. If the node clocks are drifting, the JWT is seen as expired or not-yet-valid on the Gitaly side and the RPC is rejected with `PermissionDenied`. In practice, a drift of more than ~30 seconds commonly triggers this, but the exact tolerance depends on the JWT library's leeway settings.
+
+Common causes of clock drift:
+
+- NTP is not configured on the cluster nodes, or the NTP service is not running.
+- NTP is configured but cannot reach the upstream time source (for example, blocked by a firewall).
+- A node runs on hardware with an inaccurate real-time clock (RTC) and has never been synchronized.
+
+## Troubleshooting
+
+1. Confirm the `PermissionDenied` keyword in Gitaly logs:
+
+   ```bash
+   kubectl logs -n <NAMESPACE> <gitaly-pod> | grep "PermissionDenied"
+   ```
+
+2. Compare the time reported by the Gitaly pod and a client pod (`webservice` or `sidekiq`). A difference of more than a few seconds is suspicious:
+
+   ```bash
+   kubectl exec -n <NAMESPACE> <gitaly-pod>     -- date -u
+   kubectl exec -n <NAMESPACE> <webservice-pod> -- date -u
+   ```
+
+3. Identify which nodes host the affected pods, then inspect the host clock directly:
+
+   ```bash
+   kubectl get pods -n <NAMESPACE> -o wide | grep -E "gitaly|webservice"
+   ```
+
+   On each node, check whether the system clock is synchronized with an NTP source. If NTP is not active, the node is the source of the drift.
+
+## Solution
+
+### Prerequisites
+
+- SSH access to all cluster nodes (any node may host these pods after a reschedule).
+- Permission to restart GitLab components.
+
+### Considerations
+
+- Changing the system time on a running node is a sensitive operation. Perform it during a maintenance window where possible.
+- Large backward jumps in time can disrupt databases and distributed systems. Prefer gradual slewing over a hard step-change such as `date -s`.
+
+### Steps
+
+1. Configure NTP on every cluster node and make sure the service is active. The exact tool (chrony, systemd-timesyncd, ntpd, etc.) depends on your OS and is out of scope here. After the change, confirm on every node that the system clock is synchronized with the upstream time source.
+
+2. Restart the GitLab components so they issue fresh JWTs after the clocks are aligned. Adjust the workload names to match your release:
+
+   ```bash
+   kubectl -n <NAMESPACE> rollout restart statefulset <RELEASE>-gitaly
+   kubectl -n <NAMESPACE> rollout restart deployment <RELEASE>-webservice-default
+   kubectl -n <NAMESPACE> rollout restart deployment <RELEASE>-sidekiq-all-in-1-v2
+   ```
+
+3. Verify the fix:
+
+   - Gitaly logs no longer emit `PermissionDenied` entries.
+   - Repository pages in the GitLab UI return 200.
+   - `date -u` executed inside the Gitaly and webservice pods now differ by less than one second.
+
+## Tips
+
+- For a quick cluster-wide skew check, run `date -u` on every node and compare; any outlier node is a candidate.

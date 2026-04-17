@@ -1,0 +1,82 @@
+# GitLab HTTPS Access Intermittently Fails
+
+## Problem Description
+
+Some users fail to access GitLab via browser while others succeed — the failure is **intermittent**.
+
+- Running `curl` multiple times against the same domain gives inconsistent results (some succeed, some fail with TLS errors).
+- The certificate itself is valid; refreshing the browser a few times may eventually succeed.
+
+## Root Cause
+
+The GitLab domain resolves to multiple IP addresses, but only one of them is the legitimate LB VIP or the IP of the node where the Ingress Controller runs. The other IPs do not hold the corresponding TLS certificate. Each client resolution may hit a different IP: hitting the legitimate IP succeeds, hitting a wrong IP fails with a TLS handshake error (commonly `tls: internal error` from nginx-ingress or other Go-based proxies when no certificate matches the SNI). This is why the failure appears intermittent.
+
+Common causes:
+
+- Multiple A records are configured for the same domain on the DNS server.
+- Stale IP records from previous deployments were not cleaned up.
+
+## Troubleshooting
+
+1. Check the DNS resolution and confirm whether multiple IPs are returned:
+
+   ```bash
+   nslookup gitlab.example.com
+   # Or, for more concise output:
+   dig +short gitlab.example.com
+   # If more than one IP is returned, proceed to the next step.
+   ```
+
+   Also check the client's `/etc/hosts` for stale static entries. If users access GitLab from inside the Kubernetes cluster, check CoreDNS custom records as well.
+
+2. Validate each IP separately by forcing resolution with `curl --resolve`. The IP that returns `tls: internal error` is the wrong one:
+
+   ```bash
+   curl -v --resolve gitlab.example.com:443:192.168.28.5 https://gitlab.example.com
+   curl -v --resolve gitlab.example.com:443:192.168.xx.xx https://gitlab.example.com
+   ```
+
+3. Inspect the certificate returned by the wrong IP. Its `subject` typically does not match the GitLab domain:
+
+   ```bash
+   curl -v --resolve gitlab.example.com:443:<wrong-ip> https://gitlab.example.com 2>&1 \
+     | grep -E "subject|issuer"
+   ```
+
+## Solution
+
+### Prerequisites
+
+- Access to the DNS management platform that hosts the GitLab domain.
+- The legitimate IP is identified — typically the LB VIP or the IP of the node where the Ingress Controller runs. Confirm with the network/operations team if uncertain.
+
+### Considerations
+
+Before modifying DNS records, make sure you have identified the legitimate IP. Deleting the legitimate record will make GitLab unreachable for all users. Record the original configuration before the change and perform the operation during a maintenance window.
+
+### Steps
+
+1. Log in to the DNS management platform and list all A records for the GitLab domain.
+2. Remove the incorrect A records, keeping only the legitimate IP.
+3. Wait for the DNS TTL to expire, or manually flush the local DNS cache on clients:
+
+   ```bash
+   # Linux (modern systemd)
+   sudo resolvectl flush-caches
+   # Linux (older systemd, deprecated)
+   sudo systemd-resolve --flush-caches
+
+   # macOS
+   sudo dscacheutil -flushcache && sudo killall -HUP mDNSResponder
+   ```
+
+4. Verify the fix:
+
+   - `nslookup gitlab.example.com` now returns a single IP.
+   - Running `curl -v https://gitlab.example.com` 10 times in a row succeeds every time.
+   - Users who previously could not access GitLab recover after flushing their local DNS cache.
+
+## Tips
+
+- `curl -v` prints the certificate `subject` / `issuer` directly — faster than switching to a browser when diagnosing TLS issues.
+- If the Ingress Controller sits behind multiple load balancer nodes, prefer exposing a single unified VIP instead of configuring multiple A records.
