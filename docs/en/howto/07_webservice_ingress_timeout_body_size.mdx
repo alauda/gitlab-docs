@@ -1,0 +1,206 @@
+---
+weight: 130
+---
+
+# How to Tune Webservice Ingress Timeout and Body Size
+
+This article describes how to configure the three NGINX Ingress parameters
+exposed under `gitlab.webservice.ingress`, when to tune them, and how to
+apply the same intent on other Ingress controllers.
+
+Applicable scenarios:
+
+- Pushing large repositories, LFS objects, or container images fails with
+  `413 Request Entity Too Large`.
+- `git clone` / `git push` / project import of large repositories times out
+  with `502 Bad Gateway` after ~10 minutes.
+- `502 Bad Gateway` appears briefly after upgrading or restarting webservice.
+
+## Background
+
+The GitLab webservice is exposed through an NGINX Ingress. The bundled Helm
+chart exposes three parameters under `spec.helmValues.gitlab.webservice.ingress`
+of the `GitlabOfficial` CR. They are rendered into NGINX Ingress annotations
+on the `<RELEASE>-webservice-default` Ingress object:
+
+```yaml
+apiVersion: operator.alaudadevops.io/v1alpha1
+kind: GitlabOfficial
+metadata:
+  name: sample
+spec:
+  helmValues:
+    gitlab:
+      webservice:
+        ingress:
+          proxyConnectTimeout: 15    # seconds, -> nginx.ingress.kubernetes.io/proxy-connect-timeout
+          proxyReadTimeout: 600      # seconds, -> nginx.ingress.kubernetes.io/proxy-read-timeout
+          proxyBodySize: "512m"      # size,    -> nginx.ingress.kubernetes.io/proxy-body-size
+```
+
+| Parameter             | Meaning                                                                 | Default |
+| --------------------- | ----------------------------------------------------------------------- | ------- |
+| `proxyConnectTimeout` | Time NGINX waits to establish a TCP connection to a webservice Pod.     | `15`s   |
+| `proxyReadTimeout`    | Time NGINX waits between two successive reads from the upstream Pod.    | `600`s  |
+| `proxyBodySize`       | Maximum size of the client request body NGINX will accept and forward.  | `512m`  |
+
+The defaults work for most installations. The three parameters are tightly
+related — large repositories typically need both a larger body size and a
+longer read timeout — so they are usually tuned **together**, not one at a
+time.
+
+## Prerequisites
+
+- Permission to edit the `GitlabOfficial` CR
+  (`kubectl edit gitlabofficial <NAME> -n <NS>`).
+- The fields `proxyConnectTimeout` / `proxyReadTimeout` / `proxyBodySize` are
+  only honored when the cluster uses the community **ingress-nginx**
+  controller ([kubernetes/ingress-nginx](https://github.com/kubernetes/ingress-nginx)),
+  since the chart renders them under the `nginx.ingress.kubernetes.io/*`
+  annotation namespace. For any other controller, see
+  [Configuring other Ingress controllers](#configuring-other-ingress-controllers)
+  below.
+- **Check every hop in the request path.** If a platform-level LB or reverse
+  proxy sits in front of GitLab's own Ingress, the same limits must be raised
+  there too — the effective limit is the minimum across the chain.
+
+## Tuning for Large Repositories / Uploads (ingress-nginx)
+
+Three symptoms typically appear together for installations that host large
+repositories, LFS objects, or container/package registry traffic, and they
+share the same fix — raise the three parameters together:
+
+| Symptom                                                                                                     | Parameter to raise   |
+| ----------------------------------------------------------------------------------------------------------- | -------------------- |
+| `413 Request Entity Too Large` on `git push` / UI upload / LFS / Registry. Logs: `client intended to send too large body`. | `proxyBodySize`      |
+| `git clone` / `git push` / project import hangs ~10 minutes then fails with `502` or `RPC failed`. Logs: `upstream timed out (110: Connection timed out)`. | `proxyReadTimeout`   |
+| Brief `502 Bad Gateway` during webservice rollout (disappears once Pods are Ready).                         | `proxyConnectTimeout`|
+
+Recommended starting point for a GitLab instance with large repos / LFS /
+Registry:
+
+```yaml
+spec:
+  helmValues:
+    gitlab:
+      webservice:
+        ingress:
+          proxyConnectTimeout: 30      # 15 -> 30; modest bump to absorb pod-restart jitter
+          proxyReadTimeout: 1800       # 600 -> 1800; 30 min for large clone/push/import
+          proxyBodySize: "5g"          # 512m -> 5g;  fits LFS / registry blobs
+```
+
+Pick values based on actual usage:
+
+| Use case                              | `proxyBodySize`   | `proxyReadTimeout` |
+| ------------------------------------- | ----------------- | ------------------ |
+| Source code only, small repos         | `512m` (default)  | `600` (default)    |
+| Git LFS / large binary assets         | `2g` ~ `5g`       | `1800`             |
+| Container / Package Registry          | `5g` ~ `10g`      | `1800` ~ `3600`    |
+
+> **`proxyConnectTimeout` is usually a symptom, not a knob.** A brief 502
+> during rollout normally means webservice Pods are slow to start or the
+> readiness probe is misconfigured — fix that first. Only raise it (to
+> 30–60s) when the environment has legitimately slow TCP setup, e.g.
+> cross-AZ networking. Setting it to large values like `600` will only mask
+> real backend failures and pile up NGINX worker threads.
+
+> **`proxyBodySize` only governs the Ingress layer.** GitLab itself has
+> application-level limits configured under **Admin Area → Settings →
+> General → Account and limit** (`max push size`, `max attachment size`,
+> `max import size`, ...). Raise those in parallel if needed.
+
+> **Tip:** Prefer SSH (`git@`) over HTTPS for very large Git operations. SSH
+> traffic does not traverse the HTTP Ingress and is not subject to any of
+> these three parameters.
+
+## Configuring Other Ingress Controllers
+
+The three top-level fields above only emit annotations in the
+`nginx.ingress.kubernetes.io/*` namespace and are ignored by:
+
+- Traefik, HAProxy, Contour, Istio Gateway, and other non-NGINX controllers.
+- F5 NGINX Inc.'s `nginxinc/kubernetes-ingress` — it uses a different
+  annotation namespace (`nginx.org/*`).
+
+For these controllers, set the equivalent annotations directly through
+`gitlab.webservice.ingress.annotations`, which is merged onto the rendered
+Ingress object.
+
+Example for F5 NGINX Inc. (`nginx.org/*`):
+
+```yaml
+spec:
+  helmValues:
+    gitlab:
+      webservice:
+        ingress:
+          annotations:
+            nginx.org/client-max-body-size: "5g"
+            nginx.org/proxy-read-timeout: "1800s"
+            nginx.org/proxy-connect-timeout: "30s"
+```
+
+For Traefik, the equivalent of `proxyBodySize` is the
+[`Middleware`](https://doc.traefik.io/traefik/middlewares/http/buffering/)
+resource's `buffering.maxRequestBodyBytes`, and timeouts are configured on
+the IngressRoute / EntryPoint level rather than per-Ingress annotations.
+Define those resources separately and (optionally) reference them via
+`traefik.ingress.kubernetes.io/router.middlewares` in `annotations`.
+
+When `global.ingress.provider` is set to a value other than `nginx`, the
+`nginx.ingress.kubernetes.io/*` annotations are not injected, but the
+Ingress resource itself is still rendered — values from `annotations` are
+preserved. If the chosen controller does not support per-Ingress annotations
+for these limits at all, configure them on the controller itself.
+
+## Verifying the Applied Configuration
+
+After updating the CR and waiting for reconciliation, check the annotations
+on the Ingress object:
+
+```bash
+kubectl -n <NAMESPACE> get ingress <RELEASE>-webservice-default \
+  -o jsonpath='{.metadata.annotations}' | tr ',' '\n' \
+  | grep -E 'body-size|read-timeout|connect-timeout'
+```
+
+Expected output (ingress-nginx example):
+
+```
+"nginx.ingress.kubernetes.io/proxy-body-size":"5g"
+"nginx.ingress.kubernetes.io/proxy-connect-timeout":"30"
+"nginx.ingress.kubernetes.io/proxy-read-timeout":"1800"
+```
+
+If the values do not match:
+
+- Confirm the CR was updated under
+  `spec.helmValues.gitlab.webservice.ingress` (not under
+  `spec.helmValues.nginx-ingress.controller.*`, which is a different layer).
+- Check the operator reconciled successfully:
+  `kubectl describe gitlabofficial <NAME> -n <NS>`.
+- Verify no upstream Ingress / LB in front of GitLab's own Ingress is
+  enforcing a stricter limit.
+
+## Are Larger Values Always Better?
+
+No. Each parameter has a cost:
+
+- **`proxyBodySize` too large** — NGINX buffers (or streams) the entire body;
+  a single huge upload can spike memory and disk usage on the Ingress
+  Controller node. Set it just above your real maximum, not arbitrarily high.
+- **`proxyReadTimeout` too large** — slow or stuck upstream connections hold
+  NGINX worker slots for a long time, reducing concurrency available to other
+  users. Pick a value matched to your largest legitimate request, not "as
+  high as possible".
+- **`proxyConnectTimeout` too large** — masks real backend failures (Pods not
+  ready, networking broken) by waiting many minutes before returning an
+  error. Keep it small (15–60s) and fix the backend instead.
+
+## Reference
+
+- NGINX Ingress annotations:
+  https://kubernetes.github.io/ingress-nginx/user-guide/nginx-configuration/annotations/
+- F5 NGINX Inc. annotations:
+  https://docs.nginx.com/nginx-ingress-controller/configuration/ingress-resources/advanced-configuration-with-annotations/
