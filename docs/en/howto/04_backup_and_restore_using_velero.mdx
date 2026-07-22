@@ -184,6 +184,12 @@ fi
 pg_connect_secret_name=$(kubectl get gitlabofficial -n ${GITLAB_NAMESPACE} ${GITLAB_NAME} -o jsonpath='{.spec.helmValues.global.psql.password.secret}')
 secrets_to_label+=(${pg_connect_secret_name})
 
+praefect_db_secret_name=$(kubectl get gitlabofficial -n ${GITLAB_NAMESPACE} ${GITLAB_NAME} -o jsonpath='{.spec.helmValues.global.praefect.dbSecret.secret}')
+if [ -n "${praefect_db_secret_name}" ]; then
+    echo "Found praefect database secret: ${praefect_db_secret_name}"
+    secrets_to_label+=(${praefect_db_secret_name})
+fi
+
 ingress_secret_name=$(kubectl get gitlabofficial -n ${GITLAB_NAMESPACE} ${GITLAB_NAME} -o jsonpath='{.spec.helmValues.global.ingress.tls.secretName}')
 if [ -n "${ingress_secret_name}" ]; then
     echo "Found ingress secret: ${ingress_secret_name}"
@@ -220,6 +226,10 @@ kubectl get secret -n ${GITLAB_NAMESPACE} --no-headers | grep ${GITLAB_NAME} | a
 # Output:
 # secret/sh.helm.release.v1.xxx-gitlab.v9 not labeled
 ```
+
+:::warning
+If the Redis Secret is managed outside the GitLab instance, for example by `Alauda Cache Service for Redis OSS`, the external controller may remove the backup label added by this script. In that case, Velero will not back up the Redis Secret. Treat externally managed Redis Secrets as external dependencies: back them up manually and restore them into the target namespace before starting the restored GitLab instance.
+:::
 
 If additional resources need to be backed up, refer to the [Label Additional Resources for Backup](#label_resources_for_backup) section.
 
@@ -502,18 +512,25 @@ After all components are restored, access the GitLab instance to ensure it is fu
 
 ### Preparation
 
-Restore preparation involves four steps:
+Restore preparation involves five steps:
 
 1. Restore PostgreSQL Database (Optional)
-2. Select a backup to restore
-3. Determine target namespace for restoration
-4. Uninstall Gitlab CE Operator
+2. Prepare Redis Secret (Optional)
+3. Select a backup to restore
+4. Determine target namespace for restoration
+5. Uninstall Gitlab CE Operator
 
 #### Restore PostgreSQL Database (Optional)
 
 If the new instance will still use the same PostgreSQL instance and database, there's no need to restore the PostgreSQL database.
 
 If the new instance will use a different PostgreSQL instance or database than the old instance, you need to restore the PostgreSQL database first. Refer to your PostgreSQL service provider's backup and restore documentation.
+
+#### Prepare Redis Secret (Optional)
+
+If the new instance will still use the same Redis instance and Secret name, ensure that the Redis Secret exists in the target namespace. When the Redis Secret is managed outside the GitLab instance, for example by `Alauda Cache Service for Redis OSS`, the external controller may remove the backup label added in the `Label Resources for Backup` step. In that case, Velero will not back up the Redis Secret, and you need to back it up manually and restore or copy it to the target namespace.
+
+If the new instance will use a different Redis instance or Secret name than the old instance, create the Redis Secret for the new instance in the target namespace first. You will update the GitLab CR to use the new Redis connection information in the [Modify GitLab CR Resource](#modify-gitlab-cr-resource) step.
 
 #### Select Backup Data to Restore
 
@@ -728,7 +745,7 @@ kubectl get pod -n ${NEW_GITLAB_NAMESPACE} | grep ${GITLAB_NAME} | awk '{print $
 kubectl get secret -n ${NEW_GITLAB_NAMESPACE} | grep sh.helm.release.v1.${GITLAB_NAME} | awk '{print $1}' | xargs kubectl delete secret -n ${NEW_GITLAB_NAMESPACE}
 ```
 
-#### Modify GitLab CR Resource
+#### Modify GitLab CR Resource \{#modify-gitlab-cr-resource}
 
 ```bash
 kubectl edit gitlabofficial ${GITLAB_NAME} -n ${NEW_GITLAB_NAMESPACE}
@@ -760,6 +777,11 @@ The new instance CR resource may need the following modifications. Please make c
    - **Why modify**: If not modified, the new instance will still connect to the old PostgreSQL instance or database
    - **Modification recommendation**: Change the PostgreSQL connection information to the correct values
    - **How to modify**: Please refer to [Configure PostgreSQL Access Credential Configuration](../install/03_gitlab_deploy.mdx#configure-postgresql-credentials) to modify the PostgreSQL access credential configuration.
+5. **Redis Connection Information**:
+   - **Applicable scenario**: New instance and old instance plan to use different Redis instances or Secret names
+   - **Why modify**: If not modified, the new instance will still connect to the old Redis instance or use the old Redis Secret name
+   - **Modification recommendation**: Change the Redis connection information to the correct values
+   - **How to modify**: Please refer to [Configure Redis Access Credential Configuration](../install/03_gitlab_deploy.mdx#configure-redis-credentials) to modify the Redis access credential configuration.
 
 #### Deploy Gitlab CE Operator
 
