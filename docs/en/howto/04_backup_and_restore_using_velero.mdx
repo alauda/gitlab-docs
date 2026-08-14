@@ -512,6 +512,18 @@ After all components are restored, access the GitLab instance to ensure it is fu
 
 ### Preparation
 
+:::warning
+
+Before restoring, ensure that the target cluster has the `GitlabOfficial` CRD
+from a GitLab CE Operator version compatible with the source instance. If the
+Operator has never been installed on the target cluster, install a compatible
+version first to register the CRD, and then uninstall the Operator as described
+below. Keep the `GitlabOfficial` CRD installed during the restore because the
+GitLab CR is included in the Velero backup. Redeploy the Operator only after the
+restore is complete and the restored GitLab CR has been reviewed and updated.
+
+:::
+
 Restore preparation involves five steps:
 
 1. Restore PostgreSQL Database (Optional)
