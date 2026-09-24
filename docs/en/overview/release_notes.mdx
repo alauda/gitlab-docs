@@ -14,7 +14,34 @@ The following table shows the compatibility and support matrix between the Alaud
 
 | Alauda Build of Gitlab Operator Version | Gitlab Version | ACP Version    |
 | --------------------------------------- | -------------- | -------------- |
+| v18.8.1                                 | v18.8.11       | v4.0,v4.1,v4.2,v4.3,v4.4 |
 | v18.8.0                                 | v18.8.6        | v4.0,v4.1,v4.2,v4.3 |
+
+## v18.8.1
+
+### Features and Enhancements
+
+#### Alauda Build of Gitlab
+
+The bundled Gitlab community edition moves from v18.8.6 to v18.8.11, which carries the upstream
+patch releases for the 18.8 line.
+
+This version is validated on ACP v4.4 in addition to v4.0 through v4.3.
+
+### Security
+
+Component images are rebuilt on Go 1.26.7 with the gitaly, OpenTelemetry and `golang.org/x/sys`
+dependencies advanced past their published advisories, and the `go-git` modules updated to their
+fixed releases. The manager image no longer ships the parts of its kodata tree that were never
+read at runtime, which removes the third-party content scanned along with them.
+
+### Fixed Issues
+
+{/* release-notes-for-bugs?template=fixed&project=DEVOPS&version=v18.8.1 */}
+
+### Known Issues
+
+{/* release-notes-for-bugs?template=unfixed&project=DEVOPS&version=v18.8.1 */}
 
 ## v18.8.0
 
