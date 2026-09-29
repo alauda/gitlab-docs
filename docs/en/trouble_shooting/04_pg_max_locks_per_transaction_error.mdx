@@ -1,0 +1,103 @@
+# PostgreSQL Out of Shared Memory During Database Migration
+
+## Problem Description
+
+A newly created Gitlab instance backed by an **external PostgreSQL** never becomes ready. The migrations Job fails and enters `CrashLoopBackOff`, and `sidekiq` and `webservice` stay in `Init` because they wait for it:
+
+```text
+NAME                                  READY   STATUS
+<RELEASE>-migrations-xxxxxxx-xxxxx    0/1     CrashLoopBackOff
+<RELEASE>-sidekiq-all-in-1-v2-xxxxx   0/1     Init:CrashLoopBackOff
+<RELEASE>-webservice-default-xxxxx    0/2     Init:CrashLoopBackOff
+```
+
+The migrations log shows the schema load failing part-way through:
+
+```text
+Running db:schema:load rake task
+psql:/srv/gitlab/db/structure.sql:52247: ERROR:  out of shared memory
+HINT:  You might need to increase max_locks_per_transaction.
+rake aborted!
+failed to execute:
+psql --set ON_ERROR_STOP=1 --quiet --no-psqlrc --output /dev/null \
+  --file /srv/gitlab/db/structure.sql --single-transaction <DATABASE>
+```
+
+The `HINT` line names the parameter to change. If your log is truncated before it,
+the `ERROR: out of shared memory` on a `structure.sql` line is the same problem.
+
+Note that the database connection itself is fine — earlier lines in the same log confirm Gitlab reached both PostgreSQL and Redis:
+
+```text
+Checking: main
+Database Schema - main (<DATABASE>)
+NOTICE: Database has not been initialized yet.
+NOTICE: There are NNNN pending migrations.
+```
+
+## Root Cause
+
+`out of shared memory` here is **not** about `shared_buffers` or the host running out of RAM. It is PostgreSQL's lock table filling up.
+
+Gitlab loads its schema with `psql --single-transaction`, so the whole of `db/structure.sql` — thousands of tables, indexes, constraints and sequences — is created inside **one** transaction, and every object it touches takes a lock. PostgreSQL sizes the shared lock table from `max_locks_per_transaction` at startup, and a transaction that needs more locks than that fails with `out of shared memory`.
+
+The default is `64`, which is far below what a Gitlab schema load needs. Any PostgreSQL left at the default will fail this way, so the symptom appears on a brand-new instance rather than under load.
+
+## Troubleshooting
+
+Read the migrations Job log and confirm the failure is `out of shared memory` at a `structure.sql` line, not a connection or authentication error:
+
+```bash
+kubectl -n <NAMESPACE> logs job/<RELEASE>-migrations-xxxxxxx
+```
+
+Then check the setting on the PostgreSQL side:
+
+```sql
+SHOW max_locks_per_transaction;
+SHOW max_connections;
+```
+
+A value of `64` (the built-in default) together with the error above confirms this cause.
+
+## Solution
+
+Raise `max_locks_per_transaction` on your PostgreSQL instance and restart it, then delete the failed Gitlab instance's migrations Job so it runs again (or recreate the instance).
+
+`256` is a safe starting point. The parameter is not dynamic: PostgreSQL allocates the lock table at startup, so it requires a restart.
+
+How you set it depends on how PostgreSQL is managed.
+
+For the platform's **data services** PostgreSQL, the parameter is set through the instance's parameter configuration — please refer to <ExternalSiteLink name="postgresql" href="/functions/01_create_instance.html" children="Creating a PostgreSQL Instance" />. To change it on an existing instance from the command line, patch the CR and let the operator roll it out:
+
+```bash
+kubectl -n <NAMESPACE> patch postgresql <PG_INSTANCE> --type merge -p \
+  '{"spec":{"postgresql":{"parameters":{"max_locks_per_transaction":"256"}}}}'
+```
+
+:::warning
+`spec.postgresql.parameters` **replaces** the whole map, so include any parameters that are already set — read the current value first and merge by hand, otherwise you will silently drop them.
+:::
+
+Wait for the rollout to finish, then confirm the new value **in the database** — the CR
+reporting `Running` again only means the operator finished, not that the parameter took effect:
+
+```bash
+# 1. the operator has finished rolling the instance
+kubectl -n <NAMESPACE> get postgresql <PG_INSTANCE> -o jsonpath='{.status.PostgresClusterStatus}'
+
+# 2. the value is actually live
+kubectl -n <NAMESPACE> exec <PG_POD> -c postgres -- \
+  psql -U postgres -tAc 'SHOW max_locks_per_transaction'
+```
+
+:::warning
+On a multi-replica instance, send anything that **writes** to the **primary**. Replicas are
+read-only and reject DDL with `cannot execute ... in a read-only transaction`, which is easy to
+mistake for a permissions problem. (`SHOW` is read-only and works on either.) Find the primary
+by its label:
+
+```bash
+kubectl -n <NAMESPACE> get pods -l application=spilo,spilo-role=master
+```
+:::
