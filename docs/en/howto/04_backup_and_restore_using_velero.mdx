@@ -512,25 +512,13 @@ After all components are restored, access the GitLab instance to ensure it is fu
 
 ### Preparation
 
-:::warning
-
-Before restoring, ensure that the target cluster has the `GitlabOfficial` CRD
-from a GitLab CE Operator version compatible with the source instance. If the
-Operator has never been installed on the target cluster, install a compatible
-version first to register the CRD, and then uninstall the Operator as described
-below. Keep the `GitlabOfficial` CRD installed during the restore because the
-GitLab CR is included in the Velero backup. Redeploy the Operator only after the
-restore is complete and the restored GitLab CR has been reviewed and updated.
-
-:::
-
 Restore preparation involves five steps:
 
 1. Restore PostgreSQL Database (Optional)
 2. Prepare Redis Secret (Optional)
 3. Select a backup to restore
 4. Determine target namespace for restoration
-5. Uninstall Gitlab CE Operator
+5. Uninstall the Alauda Toolchain Code Repository E1 Operator
 
 #### Restore PostgreSQL Database (Optional)
 
@@ -570,9 +558,9 @@ export NEW_GITLAB_NAMESPACE=<new namespace name>
 kubectl create namespace ${NEW_GITLAB_NAMESPACE}
 ```
 
-#### Uninstall Gitlab CE Operator
+#### Uninstall the Alauda Toolchain Code Repository E1 Operator
 
-Execute the following command to uninstall the GitLab CE Operator:
+Execute the following command to uninstall the `Alauda Toolchain Code Repository E1` operator:
 
 ```bash
 kubectl get subscription --all-namespaces | grep gitlab-ce-operator | awk '{print "kubectl delete subscription "$2" -n "$1}' | sh
@@ -581,7 +569,7 @@ kubectl get subscription --all-namespaces | grep gitlab-ce-operator | awk '{prin
 # subscription.operators.coreos.com "gitlab-ce-operator" deleted
 ```
 
-::: details Why uninstall the GitLab operator?
+::: details Why uninstall the operator?
 
 During restoration, Velero needs to start backup pods to restore data in PVCs, which takes some time. If the operator is not uninstalled during restoration, the following issues may occur:
 
@@ -590,7 +578,7 @@ During restoration, Velero needs to start backup pods to restore data in PVCs, w
 
 :::
 
-::: details Impact of Uninstalling Gitlab CE Operator
+::: details Impact of Uninstalling the Alauda Toolchain Code Repository E1 Operator
 
 If the operator is uninstalled, modifications to the GitLab CR resource will not take effect, such as adjusting resources or storage size.
 
@@ -606,7 +594,7 @@ Restore operations consist of five steps:
 2. Create restore task
 3. Clean up resources
 4. Modify GitLab CR resource
-5. Deploy Gitlab CE Operator
+5. Deploy the Alauda Toolchain Code Repository E1 Operator
 
 #### Create Restore Configuration File
 
@@ -795,9 +783,9 @@ The new instance CR resource may need the following modifications. Please make c
    - **Modification recommendation**: Change the Redis connection information to the correct values
    - **How to modify**: Please refer to [Configure Redis Access Credential Configuration](../install/03_gitlab_deploy.mdx#configure-redis-credentials) to modify the Redis access credential configuration.
 
-#### Deploy Gitlab CE Operator
+#### Deploy the Alauda Toolchain Code Repository E1 Operator
 
-Navigate to the `Administrator` view, go to `Marketplace -> OperatorHub` page and redeploy the `Alauda Build of Gitlab` operator.
+Navigate to the `Administrator` view, go to `Marketplace -> OperatorHub` page and redeploy the `Alauda Toolchain Code Repository E1` operator.
 
 After deploying the Operator, operator will deploy the new instance according to the GitLab CR. You can view the instance deployment progress in instance detail page.
 
@@ -862,3 +850,9 @@ parameters:
 - StorageClass `provisioner` must exactly match VolumeSnapshotClass `driver`
 - Both resources must exist in the cluster
 - The CSI driver must support snapshot operations
+
+---
+
+GitLab is a trademark of GitLab Inc.
+
+Alauda is an independent vendor. This product is not affiliated with, endorsed by, or sponsored by GitLab Inc. All trademarks are the property of their respective owners and are used here for identification purposes only.

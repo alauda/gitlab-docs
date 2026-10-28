@@ -1,0 +1,90 @@
+# Clone URLs and Links Miss the Port When the Entry Is Not on 80/443
+
+## Problem Description
+
+The instance is exposed through Ingress or Gateway API, but users reach it on a port other than the default (`80` for HTTP, `443` for HTTPS). This happens, for example, when the Ingress controller or the `Gateway` Service is a `NodePort`, or when an external load balancer listens on a custom port.
+
+- The web UI opens normally at `http://<domain>:<port>`, and signing in works.
+- The clone URLs shown on project pages and returned by the API leave out the port, for example `http://<domain>/group/project.git` instead of `http://<domain>:<port>/group/project.git`. `git clone` with such a URL fails or reaches a different service.
+- Other absolute links that GitLab builds from its configuration, such as the HTTP clone URL in the clone panel and the links in notification emails and webhook payloads, also leave out the port.
+- When SSH goes through a NodePort, the SSH clone URL leaves out the SSH port in the same way.
+
+## Root Cause
+
+Pages viewed in the browser follow the address of the current request, so they keep the port. Every URL that GitLab builds from its own configuration uses `global.hosts.gitlab.name` and `global.appConfig.gitlabPort` instead. The instance cannot detect which port users reach it on from outside: the Ingress controller, the `Gateway` or the load balancer translates the port before the request reaches GitLab. When `gitlabPort` is not set, GitLab assumes `80` (or `443` with HTTPS) and leaves the port out of the URLs it builds.
+
+The same applies to SSH: the SSH clone URL is built from `global.shell.port`, not from the `gitlab-shell` Service.
+
+## Troubleshooting \{#troubleshooting}
+
+1. Find the port users actually reach the instance on.
+
+   - Ingress: the HTTP/HTTPS port of the Ingress controller Service, for example:
+
+     ```bash
+     kubectl -n <ingress-controller-namespace> get svc
+     ```
+
+   - Gateway API: the port of the `Service` created for the `Gateway`. With Envoy Gateway in its default deployment mode, the `Service` is in the namespace of the Envoy Gateway controller and its name starts with `envoy-<namespace>-<gateway name>-`; in other modes or with other controllers, check `status.addresses` of the `Gateway` and the controller documentation. For example:
+
+     ```bash
+     kubectl get svc -A | grep envoy-<instance-namespace>-<gateway-name>
+     ```
+
+2. Check the port GitLab builds its URLs with. Run in a `webservice` or `sidekiq` pod of the instance:
+
+   ```bash
+   kubectl -n <instance-namespace> exec <sidekiq-pod> -c sidekiq -- \
+     sh -c 'cd /srv/gitlab && bin/rails runner "puts Gitlab.config.gitlab.url; puts Gitlab.config.gitlab_shell.ssh_path_prefix"'
+   ```
+
+   If the output is `http://<domain>` (no port) while users reach the instance on another port, this article applies.
+
+3. Check the instance configuration:
+
+   ```bash
+   kubectl -n <instance-namespace> get gitlabofficial <instance-name> \
+     -o jsonpath='{.spec.externalURL}{"\n"}{.spec.helmValues.global.appConfig.gitlabPort}{"\n"}{.spec.helmValues.global.shell.port}{"\n"}'
+   ```
+
+   An empty `gitlabPort`, or an `externalURL` without the port, confirms the cause.
+
+## Solution
+
+Choose one of the following.
+
+### Option 1: Expose the entry on the default port
+
+Expose the Ingress controller, the `Gateway` or the load balancer on `80`/`443`, for example through a `LoadBalancer` Service or the platform load balancer, and let users access `http://<domain>` or `https://<domain>` without a port. No change to the instance is needed.
+
+### Option 2: Tell the instance the external port
+
+Set the port users reach the instance on, and include it in `spec.externalURL`:
+
+```yaml
+spec:
+  externalURL: http://gitlab.example.com:31069 # Include the external port
+  helmValues:
+    global:
+      appConfig:
+        gitlabPort: 31069 # External HTTP (or HTTPS) port of the Ingress controller / Gateway / load balancer
+      shell:
+        port: 30000 # External SSH port, when SSH is exposed through a NodePort
+```
+
+After the change, wait until the `webservice` and `sidekiq` pods have been recreated with the new configuration, then run the check in step 2 of [Troubleshooting](#troubleshooting) again; the URL should now contain the port. Existing clones keep working; users who copied a clone URL without the port need to update their remote:
+
+```bash
+git remote set-url origin http://gitlab.example.com:31069/group/project.git
+```
+
+## Tips
+
+- With Gateway API, see also the notes in [Gateway API Access](../install/03_gitlab_deploy.mdx#gateway-api-access), including the HTTP-to-HTTPS redirect on non-default ports.
+- The port in `gitlabPort` must be the port seen by users, not the container port of `webservice` (`8080`) or of the Gateway listener (`80`).
+
+---
+
+GitLab is a trademark of GitLab Inc.
+
+Alauda is an independent vendor. This product is not affiliated with, endorsed by, or sponsored by GitLab Inc. All trademarks are the property of their respective owners and are used here for identification purposes only.

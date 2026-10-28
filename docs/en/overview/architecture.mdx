@@ -14,7 +14,7 @@ graph TB
   GitLabWorkhorse(GitLab Workhorse)
   GitLabShell(GitLab Shell)
   Gitaly(Gitaly)
-  Puma("Puma (Gitlab Rails)")
+  Puma("Puma (GitLab Rails)")
   Sidekiq("Sidekiq (GitLab Rails)")
   PostgreSQL(PostgreSQL)
   Redis(Redis)
@@ -45,7 +45,7 @@ graph TB
 
 - **Load Balancer**: is used to route requests to GitLab components; for example, you can use an NGINX Ingress controller or an ALB.
 - **GitLab Pages**: is a feature that allows you to publish static websites directly from a repository in GitLab.
-- **Gitlab Workhorse**: is designed to act as a smart reverse proxy to help speed up GitLab as a whole.
+- **GitLab Workhorse**: is designed to act as a smart reverse proxy to help speed up GitLab as a whole.
 - **GitLab Shell**: is designed to handle SSH-based git sessions, and modifies the list of authorized keys.
 - **Puma**: is a Ruby application server that is used to run the core Rails Application that provides the user facing features in GitLab.
 - **Sidekiq**: is a Ruby background job processor that pulls jobs from the Redis queue and processes them.
@@ -55,3 +55,8 @@ graph TB
 
 For more detailed information about each component, please refer to the [official GitLab documentation](https://docs.gitlab.com/development/architecture/#simplified-component-overview).
 
+---
+
+GitLab is a trademark of GitLab Inc.
+
+Alauda is an independent vendor. This product is not affiliated with, endorsed by, or sponsored by GitLab Inc. All trademarks are the property of their respective owners and are used here for identification purposes only.

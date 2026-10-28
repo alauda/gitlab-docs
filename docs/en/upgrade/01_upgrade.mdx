@@ -16,8 +16,8 @@ You can read the [official upgrade documentation](https://docs.gitlab.com/update
 
 The table below contains the complete upgrade path. When upgrading, you need to upgrade the Operator and GitLab instance versions in sequence.
 
-| No  | Alauda Build of GitLab Operator Version | Requirements                                                                                |
-| --- | --------------------------------------- | ------------------------------------------------------------------------------------------- |
+| No  | Alauda Toolchain Code Repository E1 Operator Version | Requirements                                                                                |
+| --- | ---------------------------------------------------- | ------------------------------------------------------------------------------------------- |
 | 1   | 17.8.z                                  | -                                                                                           |
 | 2   | 17.11.z                                 | -                                                                                           |
 | 3   | 18.2.z                                  | [**PostgreSQL 16** (upgrade required)](../install/02_gitlab_credential.mdx#pg-requirements) |
@@ -51,8 +51,14 @@ When upgrading, you need to upgrade the <ExternalSiteLink name="acp" href="exten
 
 ### Upgrading Instances via UI
 
-Go to the `Administrator` -> `Marketplace` -> `Operator Hub` page, switch to the target cluster and enter the `Alauda Build of GitLab` Operator details page, click on the instance name you want to upgrade to enter the instance details page, and click the upgrade button on the instance details page.
+Go to the `Administrator` -> `Marketplace` -> `Operator Hub` page, switch to the target cluster and enter the `Alauda Toolchain Code Repository E1` Operator details page, click on the instance name you want to upgrade to enter the instance details page, and click the upgrade button on the instance details page.
 
 ### Upgrading Instances via YAML
 
 Go to the `Administrator` -> `Clusters` -> `Resources` page, switch to the target cluster and search for the `GitLabOfficial` resource type, edit the instance resource you want to upgrade, modify the `spec.version` field to the desired instance version, and save it.
+
+---
+
+GitLab is a trademark of GitLab Inc.
+
+Alauda is an independent vendor. This product is not affiliated with, endorsed by, or sponsored by GitLab Inc. All trademarks are the property of their respective owners and are used here for identification purposes only.

@@ -213,3 +213,9 @@ GIT_LFS_SKIP_SMUDGE=1 git clone http://example.com/root/local-lfs.git
 cd local-lfs
 git lfs pull
 ```
+
+---
+
+GitLab is a trademark of GitLab Inc.
+
+Alauda is an independent vendor. This product is not affiliated with, endorsed by, or sponsored by GitLab Inc. All trademarks are the property of their respective owners and are used here for identification purposes only.

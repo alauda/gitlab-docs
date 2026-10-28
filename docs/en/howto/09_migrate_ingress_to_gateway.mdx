@@ -1,0 +1,154 @@
+---
+weight: 140
+---
+
+# Migrate an Existing Instance from Ingress to Gateway API
+
+This article describes how to switch the web entry of an existing GitLab instance from Ingress to Gateway API (`HTTPRoute`), for example before the Ingress controller of the cluster is removed.
+
+Applicable scenarios:
+
+- The cluster is moving to Gateway API and the Ingress controller will be removed.
+- A new cluster only provides Gateway API, and an instance restored or migrated into it still uses the Ingress configuration.
+
+New instances can choose Gateway API directly. See [Gateway API Access](../install/03_gitlab_deploy.mdx#gateway-api-access).
+
+## What Changes
+
+| Item | Ingress | Gateway API |
+| --- | --- | --- |
+| Web entry object | `Ingress` `<instance name>-webservice-default` | `HTTPRoute` `<instance name>-gitlab` |
+| Entry address | Address of the Ingress controller | Address of the `Gateway` (`status.addresses`) |
+| Instance settings | `gitlab.webservice.ingress.enabled: true`<br />`global.ingress.enabled: true` | `gitlab.webservice.gatewayRoute.enabled: true`<br />`gitlab.webservice.ingress.enabled: false`<br />`global.ingress.enabled: false` |
+| Domain name and external URL | Unchanged | Unchanged, as long as users reach the `Gateway` on the same port as before; otherwise see the port note in [Gateway API Access](../install/03_gitlab_deploy.mdx#gateway-api-access) |
+| SSH access | Unchanged | Unchanged |
+
+Repositories, users and other data are not affected. Only the routing objects change. The NGINX timeout and body size annotations of the Ingress no longer apply; see the notes in [Gateway API Access](../install/03_gitlab_deploy.mdx#gateway-api-access) for the Gateway equivalents.
+
+## Prerequisites
+
+1. The cluster has the Gateway API CRDs and a Gateway controller installed, and a `GatewayClass` is available:
+
+   ```bash
+   kubectl get gatewayclass
+   ```
+
+2. A `Gateway` exists in the namespace of the instance, with an `HTTP` listener that accepts the instance domain name. A minimal example:
+
+   ```yaml
+   apiVersion: gateway.networking.k8s.io/v1
+   kind: Gateway
+   metadata:
+     name: gitlab-gateway
+     namespace: <namespace>
+   spec:
+     gatewayClassName: <gateway-class>
+     listeners:
+       - name: http
+         protocol: HTTP
+         port: 80
+         allowedRoutes:
+           namespaces:
+             from: Same
+   ```
+
+   If the instance is served over HTTPS (`global.hosts.gitlab.https: true`), the `Gateway` also needs an `HTTPS` listener with the certificate, and `sectionName` below must name that listener. See [Configure HTTPS](../install/03_gitlab_deploy.mdx#gitlab_https).
+
+   Wait until the `Gateway` is programmed and has an address:
+
+   ```bash
+   kubectl -n <namespace> get gateway gitlab-gateway
+   ```
+
+3. Back up the current instance definition so that it can be restored:
+
+   ```bash
+   kubectl -n <namespace> get gitlabofficial <instance name> -o yaml > gitlab-before-gateway.yaml
+   ```
+
+## Steps
+
+The migration is done in two phases so that the instance stays reachable while DNS is switched.
+
+### Phase 1: Add the HTTPRoute Next to the Ingress
+
+Edit the instance and add `gatewayRoute` under `gitlab.webservice`, keeping Ingress enabled:
+
+```bash
+kubectl -n <namespace> edit gitlabofficial <instance name>
+```
+
+```yaml
+spec:
+  helmValues:
+    gitlab:
+      webservice:
+        gatewayRoute:
+          enabled: true
+          gatewayName: gitlab-gateway # Gateway in the instance namespace
+          sectionName: http           # Listener name of the Gateway (spec.listeners[].name)
+```
+
+After the instance is reconciled, check that the `HTTPRoute` is accepted:
+
+```bash
+kubectl -n <namespace> get httproute <instance name>-gitlab \
+  -o jsonpath='{range .status.parents[*].conditions[*]}{.type}={.status}{"\n"}{end}'
+```
+
+`Accepted=True` and `ResolvedRefs=True` are expected. Then test the new entry without changing DNS, using the address of the `Gateway`:
+
+```bash
+GATEWAY_ADDRESS=$(kubectl -n <namespace> get gateway gitlab-gateway -o jsonpath='{.status.addresses[0].value}')
+curl -I --resolve gitlab.example.com:80:${GATEWAY_ADDRESS} http://gitlab.example.com/users/sign_in
+```
+
+### Phase 2: Switch DNS and Remove the Ingress
+
+1. Point the instance domain name to the address of the `Gateway` and wait for the old DNS records to expire.
+2. Disable Ingress in the instance:
+
+   ```yaml
+   spec:
+     helmValues:
+       gitlab:
+         webservice:
+           ingress:
+             enabled: false
+       global:
+         ingress:
+           enabled: false
+   ```
+
+3. Check that the Ingress has been removed and the instance is still reachable:
+
+   ```bash
+   kubectl -n <namespace> get ingress
+   curl -I http://gitlab.example.com/users/sign_in
+   ```
+
+Also verify `git clone` / `git push` over HTTP and logging in to the web UI.
+
+## Rollback
+
+Restore the backed-up definition. Remove server-side fields such as `metadata.resourceVersion`, `metadata.uid` and `status` from `gitlab-before-gateway.yaml` first, then replace the instance with it:
+
+```bash
+kubectl replace -f gitlab-before-gateway.yaml
+```
+
+Use `kubectl replace` rather than `kubectl apply`. When the instance was changed with `kubectl edit` or `kubectl patch`, `kubectl apply` does not remove fields that are missing from the backup, so `gatewayRoute` would stay enabled and the `HTTPRoute` would not be removed.
+
+The Ingress is created again and the `HTTPRoute` is removed. Point DNS back to the Ingress controller address if it was changed.
+
+## Troubleshooting
+
+| Symptom | Check |
+| --- | --- |
+| `HTTPRoute` has `Accepted=False` with reason `NoMatchingParent` / `NotAllowedByListeners` | The `Gateway` is in another namespace, its listener `hostname` does not match the domain name, or `allowedRoutes` does not accept the namespace. |
+| Instance reports `spec.parentRefs[0].sectionName ... must be of type string` | `sectionName` is empty. Set it to the listener name of the `Gateway`. |
+| `HTTPRoute` has `Accepted=False` with reason `NoMatchingListenerHostname` or no matching section | `sectionName` does not match any listener name of the `Gateway`. |
+| `HTTPRoute` has `ResolvedRefs=False` | The webservice `Service` `<instance name>-webservice-default` does not exist yet; wait for the instance to be deployed. |
+| The instance reports a permission error creating `httproutes` | The operator version does not include Gateway API permissions; upgrade the operator. |
+| `404` from the Gateway | The request `Host` does not match the domain name configured in `global.hosts.gitlab.name`. |
+| The Gateway address times out on some nodes | The Envoy `Service` of the Gateway uses `externalTrafficPolicy: Local`, so only nodes running an Envoy Pod answer, although `status.addresses` may list every node. Use a LoadBalancer address, point DNS at a node that runs Envoy, or set `externalTrafficPolicy: Cluster` in the `EnvoyProxy` of the Gateway. |

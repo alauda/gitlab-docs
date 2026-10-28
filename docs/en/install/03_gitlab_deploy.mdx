@@ -4,11 +4,11 @@ description: "GitLab is an open-source code hosting platform that provides code 
 weight: 30
 ---
 
-This document introduces GitLab Operator subscription and GitLab instance deployment functionality.
+This document introduces how to subscribe to the `Alauda Toolchain Code Repository E1` operator and deploy a GitLab instance.
 
 ::: danger Namespace Security Policy Restrictions
 
-Gitlab **does not support** deployment in namespaces with SPA (Security Policy Admission) policy set to `Restricted` due to the following reasons:
+GitLab **does not support** deployment in namespaces with SPA (Security Policy Admission) policy set to `Restricted` due to the following reasons:
 
 1. **Init Container Requires Root Privileges**: GitLab uses init containers to initialize PVC directory permissions, which requires root privileges that are not allowed under the Restricted policy.
 
@@ -21,7 +21,7 @@ Gitlab **does not support** deployment in namespaces with SPA (Security Policy A
 
 - This document applies to GitLab 17 and above versions provided by the platform. It is decoupled from the platform based on technologies such as Operator.
 
-- Please ensure that GitLab Operator has been deployed (subscribed) in the target cluster, i.e., the GitLab instance can be created from GitLab Operator.
+- Please ensure that the `Alauda Toolchain Code Repository E1` operator has been deployed (subscribed) in the target cluster, i.e., the GitLab instance can be created from the `Alauda Toolchain Code Repository E1` operator.
 
 ## Deployment Planning
 
@@ -29,7 +29,7 @@ GitLab supports various resource configurations to accommodate different custome
 
 ### Basic Information
 
-1. The GitLab Operator provided by the platform is based on the official community GitLab Operator, with enterprise-level capability enhancements such as IPv6 support, ARM support, and security vulnerability fixes. It is fully compatible with the community version in terms of functionality, and enhances the convenience of GitLab deployment through optional and customizable templates.
+1. The `Alauda Toolchain Code Repository E1` operator provided by the platform is based on the official community GitLab Operator, with enterprise-level capability enhancements such as IPv6 support, ARM support, and security vulnerability fixes. It is fully compatible with the community version in terms of functionality, and enhances the convenience of GitLab deployment through optional and customizable templates.
 
 2. A GitLab instance includes multiple components, such as the `Gitaly component` responsible for Git repository access, the `PostgreSQL` component providing storage for application metadata and user information, and the `Redis` component used for caching, etc. The platform provides professional PostgreSQL Operator and Redis Operator, so when deploying a GitLab instance, Redis and PostgreSQL resources are no longer deployed directly, but accessed through configuring specific access credentials to existing instances.
 
@@ -71,11 +71,13 @@ According to community recommendations and practices, a non-high-availability Gi
 
 **Network**
 
-- The platform provides two mainstream network access methods: `NodePort` and `Ingress`
+- The platform provides three network access methods: `NodePort`, `Ingress` and `Gateway API`
 
    - `NodePort` requires specifying HTTP and SSH ports, and ensuring that the ports are available. `NodePort` is not suitable for `high availability` mode
 
    - `Ingress` requires specifying a domain name and ensuring that the domain name resolution is working properly
+
+   - `Gateway API` is intended for clusters that provide Gateway API instead of Ingress. It requires a domain name and a `Gateway` created in advance in the instance namespace; the instance is exposed through an `HTTPRoute` attached to that `Gateway`. See [Gateway API Access](#gateway-api-access) for details
 
 - The platform supports the HTTPS protocol, which needs to be configured after instance deployment. See [Configure HTTPS](#gitlab_https) for details.
 
@@ -105,7 +107,7 @@ Post-deployment configuration planning refers to configurations that do not need
 
 ## Instance Deployment
 
-The GitLab Operator provided by the platform offers two deployment methods: deployment from templates and deployment from YAML.
+The `Alauda Toolchain Code Repository E1` operator provided by the platform offers two deployment methods: deployment from templates and deployment from YAML.
 
 The platform provides two built-in templates: the `GitLab Quick Start` template and the `GitLab High Availability` template, while also supporting customer-defined templates to meet their specific scenarios.
 
@@ -129,7 +131,7 @@ Deploying a high-availability GitLab instance requires higher resource configura
 
 - Computing resources: 18 CPU cores, 22Gi memory
 - Storage method: Uses storage class resources to store Gitaly, the code repository component
-- Network access: Uses Ingress method, requires domain name specification
+- Network access: Uses Ingress or Gateway API method, requires domain name specification. When choosing Gateway API, select a `Gateway` that already exists in the instance namespace
 - Dependent services: Requires configuration of existing Redis and PostgreSQL access credentials, and additionally requires separate access credentials for another independent database in the PG instance for the Gitaly component
 - Other settings: Requires account credentials configuration, SSO functionality is disabled by default
 
@@ -244,9 +246,9 @@ spec:
 
 ##### Network Access \{#network_access}
 
-Network access mainly includes two methods: domain name access and NodePort access.
+Network access mainly includes three methods: domain name access through Ingress, domain name access through Gateway API, and NodePort access.
 
-Domain name access configuration snippet:
+Domain name access (Ingress) configuration snippet:
 
 ```yaml
 spec:
@@ -302,6 +304,70 @@ spec:
       shell:
         port: 30000 # SSH port number
 ```
+
+##### Gateway API Access \{#gateway-api-access}
+
+In clusters that provide Gateway API but no Ingress controller, expose the instance through an `HTTPRoute` attached to an existing `Gateway`.
+
+Prerequisites:
+
+- The cluster has the Gateway API CRDs and a Gateway controller installed (for example, Envoy Gateway), and a `GatewayClass` is available.
+- A `Gateway` exists in the **same namespace** as the GitLab instance. It must have an `HTTP` listener whose `hostname` is empty or matches the instance domain name, and its `allowedRoutes` must accept routes from that namespace. The listener name is required in the instance configuration (`sectionName`).
+- The domain name resolves to the address of the `Gateway` (see `status.addresses` of the `Gateway`).
+
+A minimal `Gateway` example:
+
+```yaml
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: gitlab-gateway
+  namespace: gitlab # Same namespace as the GitLab instance
+spec:
+  gatewayClassName: <gateway-class> # GatewayClass provided by the cluster
+  listeners:
+    - name: http
+      protocol: HTTP
+      port: 80
+      allowedRoutes:
+        namespaces:
+          from: Same
+```
+
+Gateway API access configuration snippet:
+
+```yaml
+spec:
+  helmValues:
+    gitlab:
+      webservice:
+        gatewayRoute:
+          enabled: true # Create an HTTPRoute for webservice
+          gatewayName: gitlab-gateway # Existing Gateway in the instance namespace
+          sectionName: http # Name of the Gateway listener (spec.listeners[].name); must not be empty
+        ingress:
+          enabled: false # Disable ingress access
+    global:
+      hosts:
+        domain: gitlab.example.com # Domain name
+        gitlab:
+          hostnameOverride: gitlab.example.com # Domain name
+          https: false # Use HTTP access instead of HTTPS
+          name: gitlab.example.com # Domain name
+        ssh: gitlab.example.com # Domain name
+      ingress:
+        enabled: false # Disable ingress access
+```
+
+Notes:
+
+- Do not set `global.gatewayApi.enabled`. It makes the chart create its own `Gateway` and Envoy configuration, which is not needed when an existing `Gateway` is used.
+- If users reach the `HTTP` listener of the `Gateway` on a port other than 80 (for example, the `Gateway` Service is a `NodePort`), set that port as `global.appConfig.gitlabPort` and include it in `spec.externalURL` (for example, `http://gitlab.example.com:30080`). GitLab cannot detect the external port, so without this setting the clone URLs and links it generates leave out the port.
+- Only the web entry goes through the `Gateway`. To expose SSH, use the NodePort configuration of `gitlab-shell` shown above.
+- Attach the route to an `HTTP` listener, as in the example. As with Ingress access, the instance is deployed with HTTP; to serve it over HTTPS, see [Configure HTTPS](#gitlab_https) after deployment.
+- The `HTTPRoute` does not set timeouts or body size limits, so the defaults of the Gateway controller apply instead of the Ingress annotations described in [How to Tune Webservice Ingress Timeout and Body Size](../howto/07_webservice_ingress_timeout_body_size.mdx). With Envoy Gateway, pushing a 400 MB repository (39 s) and cloning it (21 s) worked with the defaults. If large transfers are cut off, raise the limits with the policy resources of the Gateway controller (for Envoy Gateway, a `BackendTrafficPolicy` or `ClientTrafficPolicy` that targets the `HTTPRoute` or the `Gateway`).
+- The `HTTPRoute` is named `<instance name>-gitlab`. Check that it is accepted with `kubectl -n <namespace> get httproute <instance name>-gitlab -o yaml` (`status.parents[].conditions` should contain `Accepted` and `ResolvedRefs` with status `True`).
+- To switch an existing instance from Ingress to Gateway API, see [Migrate an Existing Instance from Ingress to Gateway API](../howto/09_migrate_ingress_to_gateway.mdx).
 
 ##### Redis Access Credential Configuration \{#configure-redis-credentials}
 
@@ -781,10 +847,52 @@ spec:
           secretName: gitlab-tls-cert # Certificate secret name
 ```
 
+For an instance exposed through [Gateway API](#gateway-api-access), TLS is terminated at the `Gateway` instead. Add an `HTTPS` listener that references the certificate secret to the `Gateway` (the `Gateway` and the secret are in the instance namespace):
+
+```yaml
+spec:
+  listeners:
+    - name: https
+      protocol: HTTPS
+      port: 443
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - kind: Secret
+            name: gitlab-tls-cert # Certificate secret name
+      allowedRoutes:
+        namespaces:
+          from: Same
+```
+
+Then attach the route to that listener and enable HTTPS in the GitLab instance:
+
+```yaml
+spec:
+  externalURL: https://gitlab.example.com # Add the port if the listener is not reached on 443
+  helmValues:
+    gitlab:
+      webservice:
+        gatewayRoute:
+          sectionName: https # Name of the HTTPS listener
+    global:
+      hosts:
+        gitlab:
+          https: true # Enable HTTPS
+```
+
+If users reach the HTTPS listener on a port other than 443, also set `global.appConfig.gitlabPort` to that port. The route is then attached only to the `HTTPS` listener, so requests to the `HTTP` listener return 404. To send them to HTTPS, attach an `HTTPRoute` with a `RequestRedirect` filter (`scheme: https`) to the `HTTP` listener. If the two listeners are reached on non-default ports (for example, NodePorts), also set `port` in the filter to the external HTTPS port; otherwise the redirect keeps the HTTP port.
+
 ### Configure Monitoring Dashboard
 
-GitLab Operator provides default support for the platform operations center monitoring dashboard. When GitLab Operator and GitLab instance are deployed, GitLab Metrics will be automatically configured and can be viewed in the operations center monitoring dashboard.
+The `Alauda Toolchain Code Repository E1` operator provides default support for the platform operations center monitoring dashboard. When the `Alauda Toolchain Code Repository E1` operator and a GitLab instance are deployed, GitLab Metrics will be automatically configured and can be viewed in the operations center monitoring dashboard.
 
 ### Configure External Load Balancer (LB)
 
 Configure External Load Balancer (LB) for GitLab
+
+---
+
+GitLab is a trademark of GitLab Inc.
+
+Alauda is an independent vendor. This product is not affiliated with, endorsed by, or sponsored by GitLab Inc. All trademarks are the property of their respective owners and are used here for identification purposes only.

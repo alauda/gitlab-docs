@@ -1,5 +1,5 @@
-title: Alauda Build of Gitlab Docs
-logoText: Alauda Build of Gitlab Docs
+title: Alauda Toolchain Code Repository E1 Docs
+logoText: Alauda Toolchain Code Repository E1 Docs
 lang: en
 api:
   crds:
@@ -37,7 +37,7 @@ translate:
       * ACP
       * Alauda support for PostgreSQL
       * Alauda Cache Service for Redis OSS
-      * Alauda Build of Gitlab
+      * Alauda Toolchain Code Repository E1
       * Administrator
       * Marketplace
       * Operator Hub

@@ -1,10 +1,10 @@
 # Documentation Sync Information
 
-- **Last synced**: 2026-09-29 03:05:25 UTC
+- **Last synced**: 2026-10-28 10:04:26 UTC
 - **Source repository**: alaudadevops/gitlab-ce-operator
-- **Source commit**: [e137ac2562b1df318f6d77e959c1260f39b1f04e](https://github.com/alaudadevops/gitlab-ce-operator/commit/e137ac2562b1df318f6d77e959c1260f39b1f04e)
+- **Source commit**: [1e62e14b6de3a3c9628d7fe6372182cead2ee919](https://github.com/alaudadevops/gitlab-ce-operator/commit/1e62e14b6de3a3c9628d7fe6372182cead2ee919)
 - **Triggered by**: kycheng
-- **Workflow run**: [#112](https://github.com/alaudadevops/gitlab-ce-operator/actions/runs/36515575272)
+- **Workflow run**: [#113](https://github.com/alaudadevops/gitlab-ce-operator/actions/runs/40669178301)
 
 ## Files synced:
 - docs/
