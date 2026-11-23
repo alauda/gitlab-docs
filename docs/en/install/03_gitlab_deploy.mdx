@@ -51,7 +51,7 @@ Pre-deployment resource planning refers to the resource planning that needs to b
 
 According to community recommendations and practices, a non-high-availability GitLab instance can run with a minimum of 3 cores and 6Gi of resources.
 
-In high availability mode with Gitaly Cluster, the following per-replica resources have been verified at about 10 requests per second (RPS), which corresponds to about 500 users:
+In high availability mode with Gitaly Cluster, the following per-replica resources are recommended for about 10 requests per second (RPS), which corresponds to about 500 users. They are derived from the peak usage measured with GitLab Performance Tool at about 10 and 20 RPS on the `GitLab High Availability` template:
 
 | Component | Replicas | Requests (CPU / Memory) | Limits (CPU / Memory) |
 |---|---:|---|---|
@@ -142,7 +142,7 @@ Complete the deployment by filling in the relevant information according to the 
 
 Deploying a high-availability GitLab instance requires higher resource configuration and provides a higher availability standard.
 
-- Computing resources: 18 CPU cores, 22Gi memory
+- Computing resources: the GitLab components of the template request 8.9 CPU cores and 11.5Gi of memory, with limits of 28 CPU cores and 32Gi of memory, excluding PostgreSQL, Redis, and the migrations Job. For the recommended values, see [Pre-deployment Resource Planning](#pre-deployment-resource-planning)
 - Storage method: Uses storage class resources to store Gitaly, the code repository component
 - Network access: Uses Ingress method, requires domain name specification
 - Dependent services: Requires configuration of existing Redis and PostgreSQL access credentials, and additionally requires separate access credentials for another independent database in the PG instance for the Gitaly component
@@ -503,7 +503,7 @@ spec:
 
 #### Complete YAML Example: High Availability, Storage Class, Ingress Network Access \{#ha-complete-example}
 
-The resources in this example match the verified values in [Pre-deployment Resource Planning](#pre-deployment-resource-planning). The Praefect resources must be set under `gitlab.praefect.resources`. Do not put them under `global.praefect`, which only configures Gitaly Cluster itself (database, virtual storages, and so on).
+The resources in this example match the recommended values in [Pre-deployment Resource Planning](#pre-deployment-resource-planning). The Praefect resources must be set under `gitlab.praefect.resources`. Do not put them under `global.praefect`, which only configures Gitaly Cluster itself (database, virtual storages, and so on).
 
 ```yaml
 spec:
@@ -712,7 +712,7 @@ spec:
 Notes:
 
 - The object storage connection is required in this deployment. Without it, avatars, attachments, and CI artifacts are stored only inside each Pod and are lost when the Pod restarts.
-- Keep `global.uploads.persistence.enabled` set to `true` and leave `storageClass` unset (remove the `storageClass` line of the complete example), so that no ReadWriteMany volume is required. Do not set it to `false`: the volume is then removed but its mount point is not, and the GitLab Pods fail to be created.
+- Keep `global.uploads.persistence.enabled` set to `true` and leave `storageClass` unset (remove the `storageClass` line of the complete example), so that no ReadWriteMany volume is required. Do not set it to `false`: the volume is then removed but its mount point is not, and the GitLab Pods fail to be created. Also leave `existingClaim` unset and `global.hostpath.enabled` disabled; otherwise the volume becomes that claim or a host path instead of a per-Pod `emptyDir`.
 - Keep the resources from the complete example, including `gitlab.praefect.resources`.
 
 ## Next Steps \{#gitlab_day2}
