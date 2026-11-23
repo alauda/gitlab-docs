@@ -33,7 +33,7 @@ GitLab supports various resource configurations to accommodate different custome
 
 2. A GitLab instance includes multiple components, such as the `Gitaly component` responsible for Git repository access, the `PostgreSQL` component providing storage for application metadata and user information, and the `Redis` component used for caching, etc. The platform provides professional PostgreSQL Operator and Redis Operator, so when deploying a GitLab instance, Redis and PostgreSQL resources are no longer deployed directly, but accessed through configuring specific access credentials to existing instances.
 
-### Pre-deployment Resource Planning
+### Pre-deployment Resource Planning \{#pre-deployment-resource-planning}
 
 Pre-deployment resource planning refers to the resource planning that needs to be decided before deployment and takes effect during deployment. The main content includes:
 
@@ -49,7 +49,22 @@ Pre-deployment resource planning refers to the resource planning that needs to b
 
 **Resources**
 
-According to community recommendations and practices, a non-high-availability GitLab instance can run with a minimum of 3 cores and 6Gi of resources, while in high availability mode, a minimum of 18 cores and 22Gi of resources is required for stable operation.
+According to community recommendations and practices, a non-high-availability GitLab instance can run with a minimum of 3 cores and 6Gi of resources.
+
+In high availability mode with Gitaly Cluster, the following per-replica resources are recommended for about 10 requests per second (RPS), which corresponds to about 500 users. They are derived from the peak usage measured with GitLab Performance Tool at about 10 and 20 RPS on the `GitLab High Availability` template:
+
+| Component | Replicas | Requests (CPU / Memory) | Limits (CPU / Memory) |
+|---|---:|---|---|
+| webservice | 2 | 1500m / 3Gi | 2 / 4Gi |
+| workhorse (runs in the webservice Pod) | 2 | 100m / 128Mi | 500m / 512Mi |
+| sidekiq | 2 | 500m / 1536Mi | 1 / 2Gi |
+| gitlab-shell | 2 | 100m / 128Mi | 500m / 512Mi |
+| gitaly | 3 | 1 / 1Gi | 2 / 2Gi |
+| praefect | 2 | 200m / 256Mi | 500m / 512Mi |
+
+- In total, the instance requests 7.8 CPU cores and 13Gi of memory, with limits of 15 CPU cores and 21Gi of memory. These totals do not include PostgreSQL, Redis, or the migrations Job.
+- At about 20 RPS (about 1,000 users), add one webservice replica.
+- For the corresponding YAML configuration, see [Complete YAML Example: High Availability, Storage Class, Ingress Network Access](#ha-complete-example).
 
 **Storage**
 
@@ -67,7 +82,7 @@ According to community recommendations and practices, a non-high-availability Gi
 
    - Node storage is not suitable for `high availability` mode, as it stores files in a specified path on the host node
 
-- In addition, GitLab also supports object storage. In this mode, separate storage access method adaptation is required. Please consult the vendor for details.
+- In addition, GitLab also supports object storage for attachments, CI artifacts, LFS objects, and packages. For a high availability deployment that uses object storage instead of a ReadWriteMany attachment volume, see [High Availability with Gitaly Cluster and Object Storage](#ha-gitaly-cluster-object-storage).
 
 **Network**
 
@@ -129,7 +144,7 @@ Complete the deployment by filling in the relevant information according to the 
 
 Deploying a high-availability GitLab instance requires higher resource configuration and provides a higher availability standard.
 
-- Computing resources: 18 CPU cores, 22Gi memory
+- Computing resources: the GitLab components of the template request 8.9 CPU cores and 11.5Gi of memory, with limits of 28 CPU cores and 32Gi of memory, excluding PostgreSQL, Redis, and the migrations Job. For the recommended values, see [Pre-deployment Resource Planning](#pre-deployment-resource-planning)
 - Storage method: Uses storage class resources to store Gitaly, the code repository component
 - Network access: Uses Ingress or Gateway API method, requires domain name specification. When choosing Gateway API, select a `Gateway` that already exists in the instance namespace
 - Dependent services: Requires configuration of existing Redis and PostgreSQL access credentials, and additionally requires separate access credentials for another independent database in the PG instance for the Gitaly component
@@ -137,7 +152,7 @@ Deploying a high-availability GitLab instance requires higher resource configura
 
 To achieve GitLab high availability, external dependencies must meet the following conditions:
 
-1. The `attachment storage class` must support multi-node read and write (ReadWriteMany)
+1. The `attachment storage class` must support multi-node read and write (ReadWriteMany). To store attachments in object storage instead, deploy from YAML as described in [High Availability with Gitaly Cluster and Object Storage](#ha-gitaly-cluster-object-storage)
 2. The `Redis` and `PostgreSQL` instances must be highly available
 3. The network load balancer must be highly available; when using ALB, a VIP must be configured
 4. The cluster must have more than 2 nodes
@@ -552,7 +567,9 @@ spec:
           enabled: true
 ```
 
-#### Complete YAML Example: High Availability, Storage Class, Ingress Network Access
+#### Complete YAML Example: High Availability, Storage Class, Ingress Network Access \{#ha-complete-example}
+
+The resources in this example match the recommended values in [Pre-deployment Resource Planning](#pre-deployment-resource-planning). The Praefect resources must be set under `gitlab.praefect.resources`. Do not put them under `global.praefect`, which only configures Gitaly Cluster itself (database, virtual storages, and so on).
 
 ```yaml
 spec:
@@ -565,8 +582,8 @@ spec:
           storageClass: topolvm # Storage class used for Gitaly
         resources:
           limits:
-            cpu: 4
-            memory: 4Gi
+            cpu: 2
+            memory: 2Gi
           requests:
             cpu: 1
             memory: 1Gi
@@ -577,46 +594,54 @@ spec:
         minReplicas: 2
         resources:
           limits:
-            cpu: 1
-            memory: 1Gi
+            cpu: 500m
+            memory: 512Mi
           requests:
-            cpu: 250m
-            memory: 600Mi
+            cpu: 100m
+            memory: 128Mi
       migrations:
         resources:
           limits:
             cpu: "1"
             memory: 1Gi
+      praefect:
+        resources: # Praefect resources are set here, not under global.praefect
+          limits:
+            cpu: 500m
+            memory: 512Mi
+          requests:
+            cpu: 200m
+            memory: 256Mi
       sidekiq:
         maxReplicas: 2
         minReplicas: 2
         resources:
           limits:
-            cpu: 2
+            cpu: 1
             memory: 2Gi
           requests:
-            cpu: 1
-            memory: 1Gi
+            cpu: 500m
+            memory: 1536Mi
       webservice:
         ingress:
           enabled: true # Enable Ingress access
-        maxReplicas: 2
-        minReplicas: 2
+        maxReplicas: 2 # Set to 3 at about 20 RPS (about 1,000 users)
+        minReplicas: 2 # Set to 3 at about 20 RPS (about 1,000 users)
         resources:
           limits:
             cpu: 2
             memory: 4Gi
           requests:
-            cpu: 1
-            memory: 2Gi
+            cpu: 1500m
+            memory: 3Gi
         workhorse:
           resources:
             limits:
-              cpu: 1
-              memory: 1Gi
+              cpu: 500m
+              memory: 512Mi
             requests:
-              cpu: 200m
-              memory: 200Mi
+              cpu: 100m
+              memory: 128Mi
     global:
       appConfig:
         object_store:
@@ -678,6 +703,83 @@ spec:
           size: 10Gi # Attachment storage capacity
           storageClass: ceph # Storage class used for attachments, needs to support multi-node read-write (ReadWriteMany)
 ```
+
+#### High Availability with Gitaly Cluster and Object Storage \{#ha-gitaly-cluster-object-storage}
+
+The `GitLab High Availability` template stores attachments on a ReadWriteMany volume. If the cluster does not provide ReadWriteMany storage, or you prefer object storage for attachments, deploy from YAML and combine Gitaly Cluster with object storage as described below.
+
+**Prerequisites**
+
+- A PostgreSQL database for Praefect is available. It can be a separate database in the same PostgreSQL instance used by GitLab. See the note in the [PostgreSQL](#pre-deployment-resource-planning) part of the deployment planning.
+- An S3-compatible object storage service (for example, MinIO) is reachable from the cluster, and the following buckets have been created in advance:
+
+  - `gitlab-uploads`
+  - `gitlab-artifacts`
+  - `git-lfs`
+  - `gitlab-packages`
+
+  With the MinIO `mc` command-line tool, for example:
+
+  ```bash
+  mc mb <alias>/gitlab-uploads
+  mc mb <alias>/gitlab-artifacts
+  mc mb <alias>/git-lfs
+  mc mb <alias>/gitlab-packages
+  ```
+
+- A secret that contains the object storage connection has been created in the namespace of the GitLab instance. Create a connection file such as `rails-storage.yaml`:
+
+  ```yaml
+  provider: AWS
+  region: us-east-1
+  aws_access_key_id: <access-key>
+  aws_secret_access_key: <secret-key>
+  endpoint: "http://minio.example.com"
+  path_style: true
+  ```
+
+  Then save it as a secret:
+
+  ```bash
+  kubectl create secret generic gitlab-rails-storage \
+    -n <gitlab-namespace> \
+    --from-file=connection=rails-storage.yaml
+  ```
+
+  For the meaning of each field, see [Using Object Storage for LFS Files](../howto/01_lfs.md#using-object-storage-for-lfs-files-recommended).
+
+**Configuration**
+
+Start from [Complete YAML Example: High Availability, Storage Class, Ingress Network Access](#ha-complete-example) and change the following parts:
+
+```yaml
+spec:
+  helmValues:
+    global:
+      appConfig:
+        object_store:
+          enabled: true
+          connection:
+            secret: gitlab-rails-storage # Secret that contains the object storage connection
+            key: connection # Key in the secret
+      praefect:
+        enabled: true # Enable Gitaly Cluster
+        virtualStorages:
+          - name: default
+            gitalyReplicas: 3 # Number of Gitaly replicas
+            maxUnavailable: 1
+        # Keep the psql and dbSecret settings for the Praefect database
+      uploads:
+        persistence:
+          enabled: true # Keep enabled
+          # Do not set storageClass
+```
+
+Notes:
+
+- The object storage connection is required in this deployment. Without it, avatars, attachments, and CI artifacts are stored only inside each Pod and are lost when the Pod restarts.
+- Keep `global.uploads.persistence.enabled` set to `true` and leave `storageClass` unset (remove the `storageClass` line of the complete example), so that no ReadWriteMany volume is required. Do not set it to `false`: the volume is then removed but its mount point is not, and the GitLab Pods fail to be created. Also leave `existingClaim` unset and `global.hostpath.enabled` disabled; otherwise the volume becomes that claim or a host path instead of a per-Pod `emptyDir`.
+- Keep the resources from the complete example, including `gitlab.praefect.resources`.
 
 ## Next Steps \{#gitlab_day2}
 
